@@ -1,0 +1,259 @@
+\documentclass[11pt]{article}
+
+\usepackage{color}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{pdfpages}
+
+\graphicspath{{../diagram}{../graphs}}
+
+\author{Ogier Bouvier}
+\date{\today}
+\title{A zero-copy key-value store in Rust}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Abstract}
+State-of-the-art today for high-speed networking involves kernel
+bypassing techniques making use of software such as DPDK to reduce the
+overhead typically associated with kernel based networking. Such
+software usually is much faster than traditional kernel networking,
+mostly due to avoidance of context switches between kernel and
+user space, especially when processing lots of small packets which
+happens often in the case of key-value stores such as memcached.
+Nonetheless these systems are far from perfect, having all the
+networking code and the user application inside the same address
+space means that user code can corrupt the networking stack very
+easily. Another problem these kind of systems encounter is their
+inability to ensure safety, i.e.\ that data being held in the
+networking stack is not modified by the user program (which still
+holds a pointer to it) while for example waiting for a TCP ACK.
+
+\subsection{Rust}
+We propose that Rust is a better suited language than C for kernel
+bypass networked applications. The safety guarantees Rust
+brings are very well suited for this kind of applications, while the
+performance loss (if any) is negligible. As a proof-of-concept we
+implement a key-value store on top of NetBricks in order to prove that
+it is doable as well as reasonable performance-wise to use Rust in
+this kind of scenario.
+
+\section{Rust}
+Rust is a systems programming language from Mozilla Research. Stemming
+from Mozilla's dissatisfaction with C++. As of today several parts of
+Firefox's rendering engine, Mozilla's web browser, have been rewritten
+in  Rust after the language was deemed mature enough to do so. Rust is
+engineered to  provide a lot of safety guarantees, notably memory and
+concurrency safety, through its type system thereby eliminating a lot
+of common problems in systems programming. Most notably, Rust's type
+system eliminates dangling pointers, memory leaks and data-races.
+
+\subsection{Memory safety}
+
+Rust ensures memory safety through the use of reference and
+lifetimes. Raw pointers (such as that of C) can't be dereferenced
+except through the use of the \textbf{unsafe} keyword. Since
+references are guaranteed to point to a valid memory location through
+lifetimes, the dangling pointers problem is eliminated entirely as
+long as we don't use the \textbf{unsafe} feature of Rust.
+
+Lifetimes are also part of Rust's memory safety guarantees. Lifetimes
+are Rust's way of eliminating the need for garbage collection while
+not requiring users to manually manage memory. A lifetime gets
+attached to each variable created, the compiler then analyzes the
+control flow of the program to ensure that references or values
+derived from that first value (such as reference to a struct member)
+are not used after the value is destroyed.
+
+\subsection{Concurrency safety}
+Rust also provides protection against data-races, a common problem
+when using C usually solved through atomic operations and locks.
+While it is possible to solve this kind of problems in C, it requires
+careful design and is an error-prone task. Rust therefore allows for
+quicker and safer concurrent software development. This safety does not
+come for free though. In order to guarantee that there is no data-race
+anywhere, Rust only allows either one mutable reference or any number
+of immutable reference to any given variable. By doing that, the
+compiler can ensure that the variable will only be read concurrently
+or written exclusively. Safe ways to mutate shared are also included
+in Rust. As an example the RwLock standard library structure allows
+creating mutable reference to a value from an immutable RwLock
+instance.
+
+\subsection{Performance}
+Though providing lots of guarantees Rust actually has performance
+close (if not superior) to that of C. The Rust compiler makes use of
+the LLVM compiler infrastructure and therefore benefits from all the
+work done on the optimizer in the LLVM pipeline.
+
+Rustc also does some optimization of its own. Use of closure is very
+idiomatic in Rust and usually (mostly in garbage collected languages)
+closure incur a pretty high performance cost. They must be allocated
+on the heap and are more expensive to call than regular functions. But
+in Rust closure are most of the time inlined, and through the use of
+generics we can even specialize generic functions taking to generate
+code for each variant of the closure passed to the function.
+% this is not clear...
+
+Rust also features what the Rust developers call 0-cost abstraction,
+the closure inlining we talk about above is an example of 0-cost
+abstraction, an abstraction that simplifies and generalizes the code
+while incurring no runtime performance cost.
+
+\section{Store design}
+In order to provide an efficient key-value store the first step is to
+have an efficient hashmap to store and retrieve key value pairs
+rapidly. This also poses the additional challenge of working in the
+limit of Rust's borrow checker and smart use of unsafe. Care was also
+taken to ensure that the resulting hashmap is suitable for zero-copy
+insertion and retrieval.
+
+\subsection{Zero-copy design}
+The only way to have a zero-copy hashmap is to store only pointers in
+said hashmap. Though this is less simple than it sounds since in Rust
+passing references around does not transfer ownership of the values
+referenced. However this can be worked around with the use of unsafe
+features, but first we must introduce heap allocations in Rust.
+
+Heap allocations in Rust are done through data structures available
+in the Rust standard library. The most interesting one in our case is
+the \textbf{Arc}, an \textbf{A}tomically \textbf{R}eference
+\textbf{C}ounted smart pointer. This structure provides safe and
+leak-free heap allocations meant to be used across threads.
+
+Behind the scene, an Arc is only made of single pointer to the heap.
+The memory location pointed to consist of the reference count and the
+actual data. When an Arc goes out of scope its destructor is ran,
+decreasing the reference count atomically and deallocating the memory
+if it reaches zero. Using Arc extensively inside the hashmap allows
+us to only move around Arc (or pointers) meaning we can achieve a true
+zero-copy design.
+
+\subsection{AtomicBox}
+
+In order to build a hashmap using optimistic multi version concurrency
+control we first need a way to atomically swap pointers in a safe
+way. Unfortunately the rust standard library only provides a mean to
+atomically swap raw pointers using the \textbf{AtomicPtr}
+construct. This effectively forces us to make use of raw pointers,
+thus not benefiting from any of Rust's memory safety guarantee.
+
+This leads to the \textbf{AtomicBox} abstraction, a safe wrapper
+around \textbf{AtomicPtr}, that we use to build our OMVCC hashmap.
+The AtomicBox makes use of X86 CAS instructions to improve on Arc.
+Arc provides an atomic reference count and AtomicBox provides an
+atomic reference count as well the possibility to atomically swap that
+value. Since every value is atomically reference counted it will stay
+allocated as long as any reference to it still exists while allowing
+new requests to fetch the newer value to do their work. Updates are
+made using the value atomically fetched at that point in time,
+creating a copy, modifying it as appropriate and then swapping it back
+with the old one. If the swap succeeds the old value's reference count
+is decreased (and dropped if we had the last reference), effectively
+providing an optimistic multi-version concurrency control. If the swap
+fails, i.e\. someone already swapped it with another value, we repeat
+the same process until the swap is successful.
+
+\subsection{Concurrency control}
+A more niche feature allows an Arc to be transformed into a
+raw pointer while destroying the Arc instance itself, thus allowing
+a user to control exactly how long the memory on the heap lives.
+The reference can then be transformed back into an Arc, though since
+we make use of raw pointers this requires using \textbf{unsafe}.
+
+We can then use this in conjunction with AtomicPtr to provide a
+lock-free wrapper allowing us to atomically modify any type of value.
+Building on this wrapper we can then implement an AtomicBucket for the
+hashmap.
+
+\subsection{Memory management}
+All the hashmap components are allocated on the heap. Since they are
+all in the same size range (most of them consists only of one or two
+pointers), we make the claim that memory fragmentation is not gonna be
+an issue in our case. Indeed most of the heavy allocation are coming
+from DPDK allocating memory buffers from Linux's \textbf{hugepages}
+and thus won't affect the heap.
+
+\section{DPDK}
+\subsection{NetBricks}
+NetBricks is a Rust framework on top of DPDK, providing a clean and
+Rust-friendly API, as well as advanced packet processing facilities.
+It is, though, aimed at rapid development of network functions which
+does not quite fit our current target. A fork was therefore necessary
+to modify it to suit the particular needs of a host networking
+framework.
+
+\subsection{UDP stack}
+The first step in the development of the key value store is obviously
+to have some networking working. The choice of UDP makes sense in term
+of ease and speed of development given the time constraints of the
+project. Moreover, as we will see later on, the use of R2P2 (which
+uses UDP as a transport protocol) as an RPC protocol makes a
+working UDP stack a requirement.
+
+\subsection{R2P2 server}
+R2P2, the Request Response Pair Protocol, is a recent RPC protocol
+from EPFL's Datacenter Systems Laboratory. To allow for rapid testing
+and benchmarking, the choice was made to use R2P2 as an RPC protocol
+for our key value store.
+
+The R2P2 stack is built on top of the aforementioned UDP stack. The
+R2P2 server registers a packet callback and then dispatches the packet
+to the correct request after parsing the headers.
+
+\subsection{Key value store}
+
+As expected, the key value store itself comes on top of the R2P2
+stack. Each R2P2 request received is either a GET, PUT or DELETE
+request. The store supports arbitrary key and value size and types,
+though it does no validation of any kind on either the keys or values
+it is provided.
+
+\subsubsection{Header formatting}
+
+On obvious issue when concurrently satisfying a request for the same
+key is headers. DPDK stores the headers in the same buffer as the
+packet payload. Rust, for reasons explained above, doesn't allow
+mutable pointers to be shared between threads. This means we either
+have to lock the buffer to write the headers then send, or use scatter
+gather lists to allow the headers and packet payload to be in separate
+mbufs.
+
+\section{Evaluation}
+
+We now discuss the performance of our key-value against the USR
+Facebook workload.
+
+TODO: describe test machines
+
+\subsection{Local store}
+
+\subsubsection{No collisions}
+
+TODO describe test for no hash collision
+
+\subsubsection{Artificial collision}
+
+TODO describe test setup for hash collision
+
+\subsection{Networked store}
+
+TODO once the R2P2 stack is working
+
+\section{Conclusion}
+
+
+
+\subsection{Further work}
+ARP layer in the networking stack?
+
+\end{document}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
