@@ -38,13 +38,16 @@ holds a pointer to it) while for example waiting for a TCP ACK.
 We propose that Rust is a better suited language than C for kernel
 bypass networked applications. The safety guarantees Rust
 brings are very well suited for this kind of applications, while the
-performance loss (if any) is negligible. As a proof-of-concept we
-implement a key-value store on top of NetBricks in order to prove that
-it is doable as well as reasonable performance-wise to use Rust in
-this kind of scenario.
+performance loss (if any) is negligible. As an additional benefit Rust
+allows code to be much more concise and abstract while drastically
+cutting down on the memory and concurrency bug tracking time.
+
+As a proof-of-concept we implement a key-value store on top of
+NetBricks in order to prove that it is doable as well as reasonable
+performance-wise to use Rust in this kind of scenario.
 
 \section{Rust}
-Rust is a systems programming language from Mozilla Research. Stemming
+Rust is a systems programming language from Mozilla Research, stemming
 from Mozilla's dissatisfaction with C++. As of today several parts of
 Firefox's rendering engine, Mozilla's web browser, have been rewritten
 in  Rust after the language was deemed mature enough to do so. Rust is
@@ -53,14 +56,26 @@ concurrency safety, through its type system thereby eliminating a lot
 of common problems in systems programming. Most notably, Rust's type
 system eliminates dangling pointers, memory leaks and data-races.
 
+The strong rust guarantees also speeds up development significantly by
+eliminating whole categories of bugs. On that note, the Rust type
+system exposed a bug in the design of the store. Indeed DPDK stores
+packet headers in the same buffer as the payload thus preventing
+sharing the packet buffer across threads. In C this is the kind of
+bugs that takes lots of effort and time to locate and resolve, but
+that is, with the Rust guarantees, taken care of by the compiler and
+easily located.
+
 \subsection{Memory safety}
 
 Rust ensures memory safety through the use of reference and
 lifetimes. Raw pointers (such as that of C) can't be dereferenced
-except through the use of the \textbf{unsafe} keyword. Since
-references are guaranteed to point to a valid memory location through
-lifetimes, the dangling pointers problem is eliminated entirely as
-long as we don't use the \textbf{unsafe} feature of Rust.
+except through the use of the \textbf{unsafe} keyword. References are
+guaranteed to always point to a valid memory location. Lifetimes are
+critical to ensuring that references are always valid, since they
+allow the compiler to tell when a reference might outlive the value it
+refers to. The combination of lifetimes and references thus eliminate
+the dangling pointers problem entirely as long as we don't use the
+\textbf{unsafe} feature of Rust.
 
 Lifetimes are also part of Rust's memory safety guarantees. Lifetimes
 are Rust's way of eliminating the need for garbage collection while
@@ -91,48 +106,143 @@ close (if not superior) to that of C. The Rust compiler makes use of
 the LLVM compiler infrastructure and therefore benefits from all the
 work done on the optimizer in the LLVM pipeline.
 
-Rustc also does some optimization of its own. Use of closure is very
-idiomatic in Rust and usually (mostly in garbage collected languages)
-closure incur a pretty high performance cost. They must be allocated
-on the heap and are more expensive to call than regular functions. But
-in Rust closure are most of the time inlined, and through the use of
-generics we can even specialize generic functions taking to generate
-code for each variant of the closure passed to the function.
-% this is not clear...
+Rustc also does some optimization of its own. The use of closures is very
+idiomatic in Rust. Usually (mostly in garbage collected languages)
+closure incur a pretty high performance cost, since they must be
+allocated on the heap and therefore are more expensive to call than
+regular functions. In Rust however, closures are most of the time
+inlined, and for generic functions the compiler can even specialize
+generic functions and generate code for each variant of the closure
+passed to the function.
 
 Rust also features what the Rust developers call 0-cost abstraction,
 the closure inlining we talk about above is an example of 0-cost
 abstraction, an abstraction that simplifies and generalizes the code
 while incurring no runtime performance cost.
 
-\section{Store design}
-In order to provide an efficient key-value store the first step is to
+\section{Design}
+
+\subsection{Goals}
+In order to be truly high-performance, the store should ideally
+support fast, lock-free and zero-copy insertion and retrieval. That
+means we need to come up with a concurrency control scheme to support
+concurrent lock-free updates. Since we don't need to provide strong
+consistency guarantees, we can rely on a optimistic multi version
+concurrency control scheme for simplicity of implementation and
+speed.
+
+\subsection{Local store}
+The first step in providing an efficient key-value store is to
 have an efficient hashmap to store and retrieve key value pairs
-rapidly. This also poses the additional challenge of working in the
-limit of Rust's borrow checker and smart use of unsafe. Care was also
-taken to ensure that the resulting hashmap is suitable for zero-copy
-insertion and retrieval.
+rapidly once the request have been parsed. This also poses the
+additional challenge of working within the limit of Rust's borrow
+checker and smart use of unsafe. Care was also taken to ensure that
+the resulting hashmap is suitable for zero-copy insertion and
+retrieval. This means that the ownership of values inside the hashmap
+has to be carefully managed to ensure client can retrieve and use
+values from the hashmap concurrently with the hashmap being modified.
 
-\subsection{Zero-copy design}
-The only way to have a zero-copy hashmap is to store only pointers in
-said hashmap. Though this is less simple than it sounds since in Rust
-passing references around does not transfer ownership of the values
-referenced. However this can be worked around with the use of unsafe
-features, but first we must introduce heap allocations in Rust.
+We go with the following design. The top level table is a contiguous
+array of atomic pointers to overflow buckets. And in turn each
+overflow bucket is a pointer to a key-value pair structure allowing
+easy extraction of both keys and values, as show in \ref{fig:hashmap}.
 
-Heap allocations in Rust are done through data structures available
-in the Rust standard library. The most interesting one in our case is
-the \textbf{Arc}, an \textbf{A}tomically \textbf{R}eference
-\textbf{C}ounted smart pointer. This structure provides safe and
-leak-free heap allocations meant to be used across threads.
+\begin{figure}[h!]
+  \includegraphics[width=\textwidth]{../diagram/amap1}
+  \caption{Hashmap overview}
+  \label{fig:hashmap}
+\end{figure}
 
-Behind the scene, an Arc is only made of single pointer to the heap.
-The memory location pointed to consist of the reference count and the
-actual data. When an Arc goes out of scope its destructor is ran,
-decreasing the reference count atomically and deallocating the memory
-if it reaches zero. Using Arc extensively inside the hashmap allows
-us to only move around Arc (or pointers) meaning we can achieve a true
-zero-copy design.
+The pointers inside each overflow buckets are atomically reference
+counted for multiple reasons. The first obvious one is that values
+live for an undetermined amount of time and are shared between
+multiple threads. The second reason is that the pointer to the data
+does will not only reside in the hashmap itself but also in the
+networking stack while waiting for an ACK, as shown in
+\ref{fig:omvcc}.
+
+\begin{figure}[h!]
+  \includegraphics[width=\textwidth]{../diagram/cc1}
+  \caption{Optimistic multi-version concurrency control}
+  \label{fig:omvcc}
+\end{figure}
+
+Let's know see how we are going to perform updates in the store.
+
+\begin{figure}[h!]
+  \includegraphics[width=\textwidth]{../diagram/amap2}
+  \caption{Value insertion}
+  \label{fig:omvcc-insert}
+\end{figure}
+
+We first copy the entire overflow bucket, as shown in
+~\ref{fig:omvcc-insert}. Since the overflow bucket is only made out of
+pointers this is not a costly operation. We also take care to increase
+the reference count of each pointer in the overflow bucket to avoid
+early frees of the values. Once we have our copy we build the new
+version of the overflow bucket locally. Once we have built the new
+version we attempt to swap it atomically inside the top-level
+table, ~\ref{fig:omvcc-swap}. If the compare and swap fails, we simply
+retry by fetching the new value and constructing our own once
+again. In the case where the swap is successful, the now-old value of
+the bucket may be in use by some concurrent read or write operation,
+we thus can't free it right away. This is where the choice of
+atomically reference counted pointers comes in handy. We just have to
+decrease the reference count of the old bucket, freeing it if we had
+the last reference to it.
+
+\begin{figure}
+  \includegraphics[width=\textwidth]{../diagram/amap3}
+  \caption{Bucket swapping}
+  \label{fig:omvcc-swap}
+\end{figure}
+
+This lock-free design allows a fast and zero-copy insertion of values
+inside the hashmap. The most expensive operation for an insert is
+actually the atomic compare and swap. This can become a problem if
+there is a lot of threads competing for the same bucket concurrently
+since atomic operations can cause stalling. However this would be a
+problem only if the workload we are serving is a skewed write-heavy
+workload. Since a typical workload on key-value stores implies a
+majority of reads compared to writes (the Facebook USR load is only
+0.2\% writes), this won't be a problem in our target use case.
+
+The case shown in ~\ref{fig:omvcc} actually showcases how we handle
+data shared between the user program and the networking stack. Since
+we aim to provide a reliable networking protocol, at some point the
+data will be passed to the networking stack for transmission. At this
+point the networking stack will hold on to the data until it is
+acknowledged by the other end. Our design even allows values to be
+removed from the hashmap while still being held in the networking
+stack for retransmission, see~\ref{fig:cc2}. The data is then only
+referenced in the networking stack, and freed once it is successfully
+acknowledged.
+
+\begin{figure}[h!]
+  \includegraphics[width=\textwidth]{../diagram/cc2}
+  \caption{Concurrent value removal}
+\end{figure}
+
+On another note, Rust's concurrency guarantees ensure that data held
+in the networking stack can't be modified (since the networking stack
+holds an immutable reference to it, there can't be any mutable
+reference to that data). The problem of the user program still having
+the pointer to the data thus becomes a non-problem since the compiler
+ensures that the user program does not modify it.
+
+\subsection{Network considerations}
+
+One thing we need to consider also is the type of values that are
+gonna be stored in the hashmap. Indeed, the key and values of the
+hashmap are, in the end, going to be coming from the network. The
+actual key-value datastructure used is thus critically important,
+since it will be the interface for manipulating packet data in a
+zero-copy fashion.
+
+One thing that will also be critical is header formatting when sending
+a packet out on the network.
+
+\section{Implementation}
 
 \subsection{AtomicBox}
 
@@ -179,7 +289,27 @@ an issue in our case. Indeed most of the heavy allocation are coming
 from DPDK allocating memory buffers from Linux's \textbf{hugepages}
 and thus won't affect the heap.
 
-\section{DPDK}
+\section{Networking}
+
+In this section we will delve in the networking part of the key-value
+store, highlighting the Rust-DPDK interfacing. We will also talk about
+the challenges of providing a true zero-copy networking stack in Rust
+on top of DPDK.
+
+\subsection{DPDK}
+
+As you probably know, DPDK is a kernel-bypass networking framework
+developed by Intel, typically used for high-performance networking
+applications. To support true zero-copy we are required to use some
+form of kernel bypassing since the kernel networking is absolutely
+not zero-copy. We thus implement all our networking on top of DPDK.
+% mention the ZEROCOPY kernel socket flag? though it does *not*
+% guarantee zero copy
+
+Since DPDK is written in C, we must first find some (ideally,
+convenient) bindings allowing us to make calls into DPDK from Rust
+code.
+
 \subsection{NetBricks}
 NetBricks is a Rust framework on top of DPDK, providing a clean and
 Rust-friendly API, as well as advanced packet processing facilities.
@@ -190,7 +320,7 @@ framework.
 
 \subsection{UDP stack}
 The first step in the development of the key value store is obviously
-to have some networking working. The choice of UDP makes sense in term
+to have some networking support. The choice of UDP makes sense in term
 of ease and speed of development given the time constraints of the
 project. Moreover, as we will see later on, the use of R2P2 (which
 uses UDP as a transport protocol) as an RPC protocol makes a
@@ -216,7 +346,7 @@ it is provided.
 
 \subsubsection{Header formatting}
 
-On obvious issue when concurrently satisfying a request for the same
+One obvious issue when concurrently satisfying a request for the same
 key is headers. DPDK stores the headers in the same buffer as the
 packet payload. Rust, for reasons explained above, doesn't allow
 mutable pointers to be shared between threads. This means we either
@@ -251,6 +381,7 @@ TODO once the R2P2 stack is working
 
 \subsection{Further work}
 ARP layer in the networking stack?
+TCP stack
 
 \end{document}
 %%% Local Variables:
