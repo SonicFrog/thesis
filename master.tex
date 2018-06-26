@@ -131,7 +131,7 @@ consistency guarantees, we can rely on a optimistic multi version
 concurrency control scheme for simplicity of implementation and
 speed.
 
-\subsection{Local store}
+\subsection{Local store} \label{design-overview}
 The first step in providing an efficient key-value store is to
 have an efficient hashmap to store and retrieve key value pairs
 rapidly once the request have been parsed. This also poses the
@@ -230,7 +230,7 @@ reference to that data). The problem of the user program still having
 the pointer to the data thus becomes a non-problem since the compiler
 ensures that the user program does not modify it.
 
-\subsection{Network considerations}
+\subsection{UDP stack}
 
 One thing we need to consider also is the type of values that are
 gonna be stored in the hashmap. Indeed, the key and values of the
@@ -239,19 +239,45 @@ actual key-value datastructure used is thus critically important,
 since it will be the interface for manipulating packet data in a
 zero-copy fashion.
 
-One thing that will also be critical is header formatting when sending
-a packet out on the network.
+Since we will be in a run to completion execution model the standard
+socket API calls (recv and send) is not a possible API. We thus have a
+callback oriented UDP stack. When the user application creates a
+new socket on the stack, a callback is provided. This callback is then
+used when the networking stack receives a packet.
+
+\subsection{R2P2 interface}
+
+We also aim to provide an R2P2 interface for client interfacing. This
+R2P2 stack is the interface between the user application itself (the
+key-value store in our case) and the UDP networking stack and handles
+request parsing, response sending and retransmissions when needed.
+
+As is typical in RTC packet processing models, tie-in to the user
+application will be handled through the use of callbacks. The user
+application registers its `RequestCallback' when initializing the R2P2
+stack.
+
+The stack then listens on incoming UDP packets, processing them as
+required. Packets are grouped request-wise into a HashMap while
+waiting for all packets in the request to be received. Once the
+request is complete the user registered callback is called on the
+complete request to produce a matching response. That response is then
+stored for potential retransmission while awaiting acknowledgement
+from the remote host.
 
 \section{Implementation}
 
+We now discuss how our abstract design translates into a concrete Rust
+implementation, including how it ties into the Rust standard library
+and what are the individual components of each part of the system.
+
 \subsection{AtomicBox}
 
-In order to build a hashmap using optimistic multi version concurrency
-control we first need a way to atomically swap pointers in a safe
-way. Unfortunately the rust standard library only provides a mean to
+Unfortunately the rust standard library only provides a mean to
 atomically swap raw pointers using the \textbf{AtomicPtr}
 construct. This effectively forces us to make use of raw pointers,
-thus not benefiting from any of Rust's memory safety guarantee.
+thus not benefiting from any of Rust's memory safety guarantee and
+potentially leading to memory corruption or leaks.
 
 This leads to the \textbf{AtomicBox} abstraction, a safe wrapper
 around \textbf{AtomicPtr}, that we use to build our OMVCC hashmap.
@@ -276,10 +302,14 @@ a user to control exactly how long the memory on the heap lives.
 The reference can then be transformed back into an Arc, though since
 we make use of raw pointers this requires using \textbf{unsafe}.
 
-We can then use this in conjunction with AtomicPtr to provide a
-lock-free wrapper allowing us to atomically modify any type of value.
-Building on this wrapper we can then implement an AtomicBucket for the
-hashmap.
+This means our AtomicBox abstraction also handles atomic reference
+counting of the values it contains. Meaning that the values live as
+long as there exists a reference to them anywhere. We thus have an
+optimistic multi-version concurrency control scheme. A concurrent GET
+and PUT therefore do not interfere with each other since the GET will
+fetch a version of the bucket while the PUT will create a new one that
+is then swapped independently from the one accessed by the GET
+request.
 
 \subsection{Memory management}
 All the hashmap components are allocated on the heap. Since they are
@@ -287,7 +317,8 @@ all in the same size range (most of them consists only of one or two
 pointers), we make the claim that memory fragmentation is not gonna be
 an issue in our case. Indeed most of the heavy allocation are coming
 from DPDK allocating memory buffers from Linux's \textbf{hugepages}
-and thus won't affect the heap.
+and thus won't affect the heap. Packets only live as long as needed,
+either in the hashmap or in the networking stack (or both).
 
 \section{Networking}
 
@@ -318,6 +349,34 @@ does not quite fit our current target. A fork was therefore necessary
 to modify it to suit the particular needs of a host networking
 framework.
 
+The fork makes a few modifications to the NetBricks framework. The
+first one is the inability of packets to cross thread
+boundaries. Indeed since NetBricks is geared towards network functions
+the packets are only meant to be processed by the user defined
+pipeline and is deallocated after it has gone through the whole
+pipeline. To remedy this we create the CrossPacket abstraction which
+can be created from the standard NetBricks Packet and is able to cross
+thread boundaries by being immutable. But we still need to be able to
+send packets through NetBricks and NetBricks does not know how to
+handle CrossPackets. It is therefore possible to convert a CrossPacket
+to a Packet as well as the reverse.
+
+The CrossPacket abstraction only contains a single immutable raw
+pointers to a DPDK mbuf. This means that CrossPackets can be shared
+across threads without the Rust compiler getting in the way. However
+since the pointer to the mbuf is immutable this poses a problem when
+sending the packet. Indeed DPDK stores headers in the same buffer as
+the payload, meaning we can't easily send the same payload
+concurrently to two different destination. The way to solve this is
+make use of DPDK's mbuf chaining, the first mbuf in the chain being
+local to the current thread (therefore being mutable) and the second
+one being the immutable payload shared between threads. This is the
+second notable modification we make to our NetBricks fork, the ability
+to chain mbufs to maintain the immutability of the packets we received
+from the network while maintaining the ability to send them
+concurrently to different destinations.
+
+
 \subsection{UDP stack}
 The first step in the development of the key value store is obviously
 to have some networking support. The choice of UDP makes sense in term
@@ -325,6 +384,19 @@ of ease and speed of development given the time constraints of the
 project. Moreover, as we will see later on, the use of R2P2 (which
 uses UDP as a transport protocol) as an RPC protocol makes a
 working UDP stack a requirement.
+
+The UDP stack ties in to NetBricks by registering a pipeline on all
+available cores and using this pipeline to dispatch packets to the
+correct socket. Each socket is stored in a hashmap in the stack by its
+port. Upon receiving a packet the stack filters in multiple steps the
+packets dropping invalid ones and routing the others to the correct
+socket. The corresponding callback is then called on the packets one
+by one.
+
+The sending part of the networking stack uses a round-robin approach
+and selects a different queue for each batch of packets. A more
+sophisticated approach could be envisaged to avoid flooding a specific
+port queue.
 
 \subsection{R2P2 server}
 R2P2, the Request Response Pair Protocol, is a recent RPC protocol
@@ -334,7 +406,15 @@ for our key value store.
 
 The R2P2 stack is built on top of the aforementioned UDP stack. The
 R2P2 server registers a packet callback and then dispatches the packet
-to the correct request after parsing the headers.
+to the correct request after parsing the headers. Again the R2P2
+server uses callbacks registered by the user application to handle
+requests. These callbacks return a R2P2Response structure that is then
+sent by the R2P2 server through the UDP stack.
+
+The R2P2 server handles reliable delivery through client
+acknowledgement. The response returned by the user callback is stored
+in the R2P2 server while waiting for the acknowledgement and
+retransmitted if need be.
 
 \subsection{Key value store}
 
@@ -343,16 +423,6 @@ stack. Each R2P2 request received is either a GET, PUT or DELETE
 request. The store supports arbitrary key and value size and types,
 though it does no validation of any kind on either the keys or values
 it is provided.
-
-\subsubsection{Header formatting}
-
-One obvious issue when concurrently satisfying a request for the same
-key is headers. DPDK stores the headers in the same buffer as the
-packet payload. Rust, for reasons explained above, doesn't allow
-mutable pointers to be shared between threads. This means we either
-have to lock the buffer to write the headers then send, or use scatter
-gather lists to allow the headers and packet payload to be in separate
-mbufs.
 
 \section{Evaluation}
 
@@ -363,9 +433,17 @@ TODO: describe test machines
 
 \subsection{Local store}
 
+We first evaluate how the local hashmap performance, especially when
+under a lot of load.
+
 \subsubsection{No collisions}
 
-TODO describe test for no hash collision
+We first establish the optimal performance we can expect from the
+hashmap by reducing the contention on the bucket, thus reducing the
+amount of wasted work by threads trying to swap out the buckets
+unsuccessfully. To this end, we allocate four times more buckets than
+they are keys and using a uniform distribution when generating
+workload.
 
 \subsubsection{Artificial collision}
 
@@ -377,6 +455,8 @@ TODO once the R2P2 stack is working
 
 \section{Conclusion}
 
+We hope to have provided an easy to use and clear API to build upon
+our system.
 
 
 \subsection{Further work}
