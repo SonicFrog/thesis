@@ -1,7 +1,7 @@
 .gitignore
 
 !mkgraph = |> ../graphs/gen.py %f |> %f_PUT.png %f_GET.png
-!mkpdf = |> pdflatex $(FLAGS) %f |> %B.pdf %B.log %B.aux %B.toc %B.out
+!mkpdf = |> pdflatex $(FLAGS) %f ; pdflatex $(FLAGS) %f |> %B.pdf %B.log %B.aux %B.toc %B.out
 
 # removed until graphs are actually in the document
 # : foreach ../graphs/* |> ../gen.py %f -o %f |> %f_PUT.png %f_GET.png
