@@ -221,6 +221,7 @@ acknowledged.
 \begin{figure}[h!]
   \includegraphics[width=\textwidth]{../diagram/cc2}
   \caption{Concurrent value removal}
+  \label{fig:cc2}
 \end{figure}
 
 On another note, Rust's concurrency guarantees ensure that data held
@@ -334,14 +335,24 @@ developed by Intel, typically used for high-performance networking
 applications. To support true zero-copy we are required to use some
 form of kernel bypassing since the kernel networking is absolutely
 not zero-copy. We thus implement all our networking on top of DPDK.
-% mention the ZEROCOPY kernel socket flag? though it does *not*
-% guarantee zero copy
+
+It is worth mentioning the Linux kernel socket flag for zero copy.
+Though it does not provide guaranteed zero copy sending/receiving a
+port of nginx using it saw a 9\% increase in performance with minimal
+code changes. We chose not to use it though, since it would eliminate
+one of the most interesting aspect of the project, the ability to have
+a safe userspace networking stack in the same address space as the
+user program.
+% insert ref to paper
 
 Since DPDK is written in C, we must first find some (ideally,
 convenient) bindings allowing us to make calls into DPDK from Rust
-code.
+code. One more thing to consider is the inherent unsafety in calling C
+code from Rust. Since C code has none of the guarantees of Rust calls
+to C functions must be in an unsafe block. A convenient safe Rust
+interface is therefore a must for speed and ease of development.
 
-\subsection{NetBricks}
+\section{NetBricks}
 NetBricks is a Rust framework on top of DPDK, providing a clean and
 Rust-friendly API, as well as advanced packet processing facilities.
 It is, though, aimed at rapid development of network functions which
@@ -376,6 +387,16 @@ to chain mbufs to maintain the immutability of the packets we received
 from the network while maintaining the ability to send them
 concurrently to different destinations.
 
+One more thing that needs to be implemented in NetBricks is packets
+living longer than the packet processing pipeline. Since NetBricks is
+aimed at network function once a packet has gone through the packet
+processing pipeline it has no reason to stay allocated (as in the case
+of a firewall, when the decision has been made to forward the packet
+it's not needed anymore). But in our case packets are longer lived, we
+need to keep them in the store to answer queries later on. We then
+need a way to prevent deallocation of packets once they leave the
+pipeline. % TODO: describe how this done
+
 
 \subsection{UDP stack}
 The first step in the development of the key value store is obviously
@@ -404,6 +425,12 @@ from EPFL's Datacenter Systems Laboratory. To allow for rapid testing
 and benchmarking, the choice was made to use R2P2 as an RPC protocol
 for our key value store.
 
+We use a variant of the R2P2 protocol that adds active acknowledgement
+from clients in order to reduce latency when packets are dropped. For
+the sake of simplicity we also do not handle packets that are
+delivered out of order, mostly to avoid resizing buffers used to store
+the request while it is not completely received.
+
 The R2P2 stack is built on top of the aforementioned UDP stack. The
 R2P2 server registers a packet callback and then dispatches the packet
 to the correct request after parsing the headers. Again the R2P2
@@ -418,11 +445,16 @@ retransmitted if need be.
 
 \subsection{Key value store}
 
-As expected, the key value store itself comes on top of the R2P2
-stack. Each R2P2 request received is either a GET, PUT or DELETE
-request. The store supports arbitrary key and value size and types,
-though it does no validation of any kind on either the keys or values
-it is provided.
+The key-value store is in this case what we call the user program, the
+layer that comes last on top of the R2P2 stack. It registers a request
+callback with the R2P2 server and parses the request payload to then
+perform the requested operations.
+
+The store supports arbitrary key and value size and types, though it
+does no validation of any kind on either the keys or values it is
+provided. It makes use of the hashmap mentioned in
+~\ref{design-overview} and adds request parsing on top of the R2P2
+server.
 
 \section{Evaluation}
 
@@ -447,7 +479,12 @@ workload.
 
 \subsubsection{Artificial collision}
 
-TODO describe test setup for hash collision
+We now consider the case of a skewed and/or write heavy workload and
+evaluate the performance of the hashmap in this scenario. In order to
+simulate this, we reduce the number of buckets in the hashmap. This
+artificial collision indeed introduces contention between threads for
+buckets and will cause wasted work when two threads update the same
+bucket concurrently.
 
 \subsection{Networked store}
 
@@ -456,12 +493,14 @@ TODO once the R2P2 stack is working
 \section{Conclusion}
 
 We hope to have provided an easy to use and clear API to build upon
-our system.
+our system. Though not perfect by any stretch of the imagination it
+outperforms memcached by a lot. % hopefully
 
 
 \subsection{Further work}
 ARP layer in the networking stack?
 TCP stack
+mention the weird bug when allocating new packets?
 
 \end{document}
 %%% Local Variables:
