@@ -127,9 +127,16 @@ In order to be truly high-performance, the store should ideally
 support fast, lock-free and zero-copy insertion and retrieval. That
 means we need to come up with a concurrency control scheme to support
 concurrent lock-free updates. Since we don't need to provide strong
-consistency guarantees, we can rely on a optimistic multi version
-concurrency control scheme for simplicity of implementation and
-speed.
+consistency guarantees (other than being eventually consistent), we
+can rely on a optimistic multi version concurrency control scheme for
+simplicity of implementation and speed.
+
+We should also provide an efficient and convenient interface to the
+network. This interface should also uphold the zero copy property that
+is provided by the store in order to provide a true zero copy
+key-value store. If we succeed in providing such an interface, further
+development of high-performance networking applications in Rust would
+be much simpler.
 
 \subsection{Local store} \label{design-overview}
 The first step in providing an efficient key-value store is to
@@ -167,7 +174,7 @@ networking stack while waiting for an ACK, as shown in
   \label{fig:omvcc}
 \end{figure}
 
-Let's know see how we are going to perform updates in the store.
+Let's now see how we are going to perform updates in the store.
 
 \begin{figure}[h!]
   \includegraphics[width=\textwidth]{../diagram/amap2}
@@ -360,8 +367,8 @@ does not quite fit our current target. A fork was therefore necessary
 to modify it to suit the particular needs of a host networking
 framework.
 
-The fork makes a few modifications to the NetBricks framework. The
-first one is the inability of packets to cross thread
+The fork comes with a few modifications to the NetBricks
+framework. The first one is the inability of packets to cross thread
 boundaries. Indeed since NetBricks is geared towards network functions
 the packets are only meant to be processed by the user defined
 pipeline and is deallocated after it has gone through the whole
@@ -395,8 +402,18 @@ of a firewall, when the decision has been made to forward the packet
 it's not needed anymore). But in our case packets are longer lived, we
 need to keep them in the store to answer queries later on. We then
 need a way to prevent deallocation of packets once they leave the
-pipeline. % TODO: describe how this done
-
+pipeline. We make use of mbuf reference counts to do this. In our
+segmented packets the headers always have a reference count of one,
+indeed they are not needed once the packet has been sent successfully,
+thus we let DPDK free them once the packet have gone through the
+NIC. The payload on the other hand should not be deallocated after
+sending, so we set its reference count to 2, thereby preventing DPDK
+from freeing it. But we still need to free them once they are not
+needed anymore. The problem here is that mbuf reference counts are not
+atomic, this is a problem in our case since the same payload could be
+sent from two different threads which will both need to increment
+it. That means we need to wrap the actual payload and provide an
+atomic reference counting capability.
 
 \subsection{UDP stack}
 The first step in the development of the key value store is obviously
@@ -445,16 +462,28 @@ retransmitted if need be.
 
 \subsection{Key value store}
 
-The key-value store is in this case what we call the user program, the
-layer that comes last on top of the R2P2 stack. It registers a request
-callback with the R2P2 server and parses the request payload to then
-perform the requested operations.
+The key-value store uses a simplified version of the Redis
+protocol. It only supports SET and GET requests, since the test
+workload has no other type of requests.
 
-The store supports arbitrary key and value size and types, though it
-does no validation of any kind on either the keys or values it is
-provided. It makes use of the hashmap mentioned in
-~\ref{design-overview} and adds request parsing on top of the R2P2
-server.
+The Redis server implementation interfaces with the R2P2 server through
+the request callback registration mechanism. It then handles
+construction of the actual value that will be stored in the
+hashmap. The requirements for the actual hashmap value and key
+datastructures are mostly to play nice with the Rust memory management
+model and DPDK mbufs. Indeed since we use segmented packets, we need
+the headers to be freed once the request has been satisfied but the
+payload itself must be kept as long as either the hashmap or the
+networking hold it. As the payload can be sent concurrently from
+different threads we need some sort of atomic reference counting on
+the mbufs. The problem here is that mbufs reference counts are not
+atomic (they're plain 16 bits integer).
+
+This leads us to the \textbf{Payload} abstraction. This structure combines a
+convenient access to the value and key, but also the mbufs containing
+that value and key. Since the structure contains the packet
+themselves the Rust compiler ensures that access to the key and value
+is bound to the lifetime of the packets actually containing them.
 
 \section{Evaluation}
 
@@ -466,7 +495,11 @@ TODO: describe test machines
 \subsection{Local store}
 
 We first evaluate how the local hashmap performance, especially when
-under a lot of load.
+under a lot of load. We use UTF-8 string keys of 128 bytes with values
+of 64 bits to simulate only copying pointers to packets from the
+network. We generate a random workload for each of the 15 concurrent
+thread and start them simultaneously. Each thread performs one million
+GET and 1 million PUT request, on a previously initialized map.
 
 \subsubsection{No collisions}
 
@@ -493,14 +526,27 @@ TODO once the R2P2 stack is working
 \section{Conclusion}
 
 We hope to have provided an easy to use and clear API to build upon
-our system. Though not perfect by any stretch of the imagination it
-outperforms memcached by a lot. % hopefully
-
+our system.
 
 \subsection{Further work}
-ARP layer in the networking stack?
-TCP stack
-mention the weird bug when allocating new packets?
+
+We finish by mentioning what features are missing or could be useful
+in such a piece of software. We have provided a UDP stack on top of
+NetBricks, even though in real-life scenario of networking
+applications UDP is rarely used. A TCP stack on top of NetBricks would
+therefore be a considerable improvement.
+
+One other thing that makes sense to have is an ARP handler. In our
+case we respond to a request, so we have both the source and
+destination MAC addresses at hand. But in the case where we want to
+send a packet to an arbitrary IP we need to figure out the destination
+MAC address. This is where an ARP protocol handler would come in
+handy.
+
+With an ARP and TCP stack we would be close to a full featured
+networking framework in Rust for kernel bypass. Such a system would
+provide both the speed and the convenience of traditional socket based
+networking and additionally the safety guarantees of Rust.
 
 \end{document}
 %%% Local Variables:
