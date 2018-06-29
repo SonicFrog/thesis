@@ -23,16 +23,25 @@ State-of-the-art today for high-speed networking involves kernel
 bypassing techniques making use of software such as DPDK to reduce the
 overhead typically associated with kernel based networking. Such
 software usually is much faster than traditional kernel networking,
-mostly due to avoidance of context switches between kernel and
-user space, especially when processing lots of small packets which
-happens often in the case of key-value stores such as memcached.
-Nonetheless these systems are far from perfect, having all the
-networking code and the user application inside the same address
+mostly due to avoidance of context switches and data copies between
+kernel and user space, especially when processing lots of small
+packets which  happens often in the case of key-value stores such as
+memcached. Nonetheless these systems are far from perfect, having all
+the  networking code and the user application inside the same address
 space means that user code can corrupt the networking stack very
-easily. Another problem these kind of systems encounter is their
-inability to ensure safety, i.e.\ that data being held in the
-networking stack is not modified by the user program (which still
-holds a pointer to it) while for example waiting for a TCP ACK.
+easily. Development of such applications is also much more cumbersome
+than traditional kernel based approaches, indeed the user program must
+be notified of when buffers are not needed anymore in order to know
+when they can be freed or used again after passing them to the
+networking stack. This is usually done through callbacks, such as an
+\textbf{acked} callback, upon receiving a tcp ack from the remote
+host. The necessity to handle this kind of networking details make
+kernel bypass application much more time consuming and error-prone to
+develop than regular socket based ones. Another problem these kind of
+systems encounter is their inability to ensure safety, i.e.\ that data
+being held in the networking stack is not modified by the user program
+(which still holds a pointer to it) while for example waiting for a
+TCP ACK.
 
 \subsection{Rust}
 We propose that Rust is a better suited language than C for kernel
@@ -40,30 +49,40 @@ bypass networked applications. The safety guarantees Rust
 brings are very well suited for this kind of applications, while the
 performance loss (if any) is negligible. As an additional benefit Rust
 allows code to be much more concise and abstract while drastically
-cutting down on the memory and concurrency bug tracking time.
+cutting down on the memory and concurrency bug tracking time. The
+memory management model of Rust will also prove invaluable when
+ensuring integrity of data in between the networking stack and the
+user application.
 
 As a proof-of-concept we implement a key-value store on top of
-NetBricks in order to prove that it is doable as well as reasonable
+DPDK in order to prove that it is doable as well as reasonable
 performance-wise to use Rust in this kind of scenario.
 
 \section{Rust}
 Rust is a systems programming language from Mozilla Research, stemming
 from Mozilla's dissatisfaction with C++. As of today several parts of
-Firefox's rendering engine, Mozilla's web browser, have been rewritten
-in  Rust after the language was deemed mature enough to do so. Rust is
+Firefox's rendering engine, Servo, have been rewritten
+in Rust after the language was deemed mature enough to do so. Rust is
 engineered to  provide a lot of safety guarantees, notably memory and
-concurrency safety, through its type system thereby eliminating a lot
-of common problems in systems programming. Most notably, Rust's type
-system eliminates dangling pointers, memory leaks and data-races.
+concurrency safety through its type system thereby eliminating a lot
+of common problems in systems programming. Most importantly, Rust's
+type system eliminates use-after-free, double-free, invalid pointers,
+memory leaks and data-races.
 
-The strong rust guarantees also speeds up development significantly by
-eliminating whole categories of bugs. On that note, the Rust type
-system exposed a bug in the design of the store. Indeed DPDK stores
-packet headers in the same buffer as the payload thus preventing
-sharing the packet buffer across threads. In C this is the kind of
-bugs that takes lots of effort and time to locate and resolve, but
-that is, with the Rust guarantees, taken care of by the compiler and
-easily located.
+The strong Rust guarantees also speed up development significantly by
+eliminating whole categories of bugs. Overall, the time writing is
+increasing since often the compiler will straight out refuse to
+compile code that potentially violates its guarantees. The
+counter-part to this is that time spent debugging is very much
+reduced. This is particularly useful when tracking down data race bugs
+which are notoriously hard to diagnose. As an example, the Rust type
+system exposed a bug in the design of the store, that would been, if
+written in C, only apparent much later and very hard to track
+down. Indeed DPDK stores packet headers in the same buffer as the
+payload thus preventing sharing the packet buffer across threads. In C
+this is the kind of bugs that takes lots of effort and time to locate
+and resolve, but that is, with the Rust guarantees, taken care of by
+the compiler and easily located.
 
 \subsection{Memory safety}
 
@@ -255,10 +274,15 @@ used when the networking stack receives a packet.
 
 \subsection{R2P2 interface}
 
-We also aim to provide an R2P2 interface for client interfacing. This
-R2P2 stack is the interface between the user application itself (the
-key-value store in our case) and the UDP networking stack and handles
-request parsing, response sending and retransmissions when needed.
+R2P2, the Request Response Pair Protocol, is a recent RPC protocol
+from EPFL's Datacenter Systems Laboratory. To allow for rapid testing
+and benchmarking, the choice was made to use R2P2 as an RPC protocol
+for our key value store.
+
+We provide an R2P2 interface for client interfacing. This R2P2 stack
+is the interface between the user application itself (the key-value
+store in our case) and the UDP networking stack and handles request
+parsing, response sending and retransmissions when needed.
 
 As is typical in RTC packet processing models, tie-in to the user
 application will be handled through the use of callbacks. The user
@@ -304,11 +328,11 @@ fails, i.e\. someone already swapped it with another value, we repeat
 the same process until the swap is successful.
 
 \subsection{Concurrency control}
-A more niche feature allows an Arc to be transformed into a
-raw pointer while destroying the Arc instance itself, thus allowing
-a user to control exactly how long the memory on the heap lives.
-The reference can then be transformed back into an Arc, though since
-we make use of raw pointers this requires using \textbf{unsafe}.
+To build the AtomicBox abstraction we make use of the capability of
+Arc to be transformed into raw pointers, thus allowing a user to
+control exactly how long the memory on the heap lives. The reference
+can then be transformed back into an Arc, though since we make use of
+raw pointers this requires using \textbf{unsafe}.
 
 This means our AtomicBox abstraction also handles atomic reference
 counting of the values it contains. Meaning that the values live as
@@ -320,20 +344,45 @@ is then swapped independently from the one accessed by the GET
 request.
 
 \subsection{Memory management}
-All the hashmap components are allocated on the heap. Since they are
-all in the same size range (most of them consists only of one or two
-pointers), we make the claim that memory fragmentation is not gonna be
-an issue in our case. Indeed most of the heavy allocation are coming
-from DPDK allocating memory buffers from Linux's \textbf{hugepages}
-and thus won't affect the heap. Packets only live as long as needed,
-either in the hashmap or in the networking stack (or both).
+Since they are to be shared amongst threads, all the hashmap
+components are allocated on the heap. As they are  all in the same
+size range (most of them consists only of one or two pointers), we
+make the claim that memory fragmentation is not gonna be an issue in
+our case. Indeed most of the heavy allocation are coming from DPDK
+allocating memory buffers from Linux's \textbf{hugepages} and thus
+won't affect the heap. Packets only live as long as needed, either in
+the hashmap or in the networking stack (or both).
 
 \section{Networking}
 
 In this section we will delve in the networking part of the key-value
-store, highlighting the Rust-DPDK interfacing. We will also talk about
-the challenges of providing a true zero-copy networking stack in Rust
-on top of DPDK.
+store, highlighting the Rust-DPDK interfacing as well as the different
+APIs that we provide on top of said interface and how they
+interconnect to form the final key-value store. We will also talk
+about the challenges of providing a true zero-copy networking stack in
+Rust on top of DPDK.
+
+\subsection{Design overview}
+
+Let's start with an overview of the system as a whole before diving
+into the details of each individual piece.
+
+Each packet is first received by DPDK from the NIC. The packets are
+then processed through the NetBricks pipeline to be handed over to the
+UDP stack. The UDP stack then filters and matches packets to a given
+socket. Each socket has an associated callback registered by the
+user. In our case, the socket are created by the R2P2 server which
+uses them to receive R2P2 requests from the network. Once every packet
+in a request has been received, the R2P2 server then invokes its own
+user callback, this time called the Request Callback. This callback
+is registered by the last layer in the system, the actual key-value
+store. The key-value store uses R2P2 to satisfy requests in the Redis
+protocol. This is also where our hashmap comes in (though it is used
+all across the system), to store the key value pairs.
+
+Let's now dive into more gory details about each part individually.
+
+% TODO: diagram of how each piece is tied together
 
 \subsection{DPDK}
 
@@ -359,7 +408,7 @@ code from Rust. Since C code has none of the guarantees of Rust calls
 to C functions must be in an unsafe block. A convenient safe Rust
 interface is therefore a must for speed and ease of development.
 
-\section{NetBricks}
+\subsection{NetBricks}
 NetBricks is a Rust framework on top of DPDK, providing a clean and
 Rust-friendly API, as well as advanced packet processing facilities.
 It is, though, aimed at rapid development of network functions which
@@ -437,10 +486,6 @@ sophisticated approach could be envisaged to avoid flooding a specific
 port queue.
 
 \subsection{R2P2 server}
-R2P2, the Request Response Pair Protocol, is a recent RPC protocol
-from EPFL's Datacenter Systems Laboratory. To allow for rapid testing
-and benchmarking, the choice was made to use R2P2 as an RPC protocol
-for our key value store.
 
 We use a variant of the R2P2 protocol that adds active acknowledgement
 from clients in order to reduce latency when packets are dropped. For
