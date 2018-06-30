@@ -15,9 +15,12 @@
 \begin{document}
 
 \maketitle
+\pagenumbering{gobble}
 \tableofcontents
 \newpage
 
+\pagenumbering{arabic}
+\setcounter{page}{1}
 \section{Abstract}
 State-of-the-art today for high-speed networking involves kernel
 bypassing techniques making use of software such as DPDK to reduce the
@@ -70,8 +73,8 @@ type system eliminates use-after-free, double-free, invalid pointers,
 memory leaks and data-races.
 
 The strong Rust guarantees also speed up development significantly by
-eliminating whole categories of bugs. Overall, the time writing is
-increasing since often the compiler will straight out refuse to
+eliminating whole categories of bugs. Overall, the time writing code
+is increasing since often the compiler will straight out refuse to
 compile code that potentially violates its guarantees. The
 counter-part to this is that time spent debugging is very much
 reduced. This is particularly useful when tracking down data race bugs
@@ -80,9 +83,9 @@ system exposed a bug in the design of the store, that would been, if
 written in C, only apparent much later and very hard to track
 down. Indeed DPDK stores packet headers in the same buffer as the
 payload thus preventing sharing the packet buffer across threads. In C
-this is the kind of bugs that takes lots of effort and time to locate
-and resolve, but that is, with the Rust guarantees, taken care of by
-the compiler and easily located.
+this is the kind of issue that takes lots of effort and time to locate
+and resolve. But that is, with the Rust guarantees, taken care of by
+the compiler and easily located and fixed.
 
 \subsection{Memory safety}
 
@@ -267,8 +270,8 @@ since it will be the interface for manipulating packet data in a
 zero-copy fashion.
 
 Since we will be in a run to completion execution model the standard
-socket API calls (recv and send) is not a possible API. We thus have a
-callback oriented UDP stack. When the user application creates a
+socket API calls (recv and send) is not a possible API\@. We thus have
+a callback oriented UDP stack. When the user application creates a
 new socket on the stack, a callback is provided. This callback is then
 used when the networking stack receives a packet.
 
@@ -350,8 +353,7 @@ size range (most of them consists only of one or two pointers), we
 make the claim that memory fragmentation is not gonna be an issue in
 our case. Indeed most of the heavy allocation are coming from DPDK
 allocating memory buffers from Linux's \textbf{hugepages} and thus
-won't affect the heap. Packets only live as long as needed, either in
-the hashmap or in the networking stack (or both).
+won't affect the heap.
 
 \section{Networking}
 
@@ -366,6 +368,12 @@ Rust on top of DPDK.
 
 Let's start with an overview of the system as a whole before diving
 into the details of each individual piece.
+
+\begin{figure}
+  \includegraphics[width=\textwidth]{../diagram/overview}
+  \caption{System overview}
+  \label{fig:design-overview}
+\end{figure}
 
 Each packet is first received by DPDK from the NIC. The packets are
 then processed through the NetBricks pipeline to be handed over to the
@@ -553,7 +561,9 @@ hashmap by reducing the contention on the bucket, thus reducing the
 amount of wasted work by threads trying to swap out the buckets
 unsuccessfully. To this end, we allocate four times more buckets than
 they are keys and using a uniform distribution when generating
-workload.
+workload. The set of keys is pre-determined and no new keys are
+inserted throughout the test, meaning the size of each bucket will
+stay constant.
 
 \subsubsection{Artificial collision}
 
@@ -591,7 +601,8 @@ handy.
 With an ARP and TCP stack we would be close to a full featured
 networking framework in Rust for kernel bypass. Such a system would
 provide both the speed and the convenience of traditional socket based
-networking and additionally the safety guarantees of Rust.
+networking while also providing better networking performance and the
+safety of the Rust programming language.
 
 \end{document}
 %%% Local Variables:
