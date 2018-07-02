@@ -2,7 +2,7 @@
 
 \usepackage{color}
 \usepackage{graphicx}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 \usepackage{listings}
 \usepackage{pdfpages}
 
@@ -355,6 +355,12 @@ our case. Indeed most of the heavy allocation are coming from DPDK
 allocating memory buffers from Linux's \textbf{hugepages} and thus
 won't affect the heap.
 
+\subsection{UDP}
+
+We also aim to provide an efficient easy to use UDP stack on top of
+NetBricks to facilitate development of other applications. This UDP
+stack should use callbacks to hand over packets to the user program.
+
 \section{Networking}
 
 In this section we will delve in the networking part of the key-value
@@ -581,7 +587,8 @@ TODO once the R2P2 stack is working
 \section{Conclusion}
 
 We hope to have provided an easy to use and clear API to build upon
-our system.
+our system. We also think that we have proved that Rust is a valid
+language to build kernel bypass networking in.
 
 \subsection{Further work}
 
