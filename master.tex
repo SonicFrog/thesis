@@ -22,135 +22,162 @@
 \pagenumbering{arabic}
 \setcounter{page}{1}
 \section{Abstract}
-State-of-the-art today for high-speed networking involves kernel
+
+The state of the art today for high-speed networking involves kernel
 bypassing techniques making use of software such as DPDK to reduce the
 overhead typically associated with kernel based networking. Such
-software usually is much faster than traditional kernel networking,
+software is usually much faster than traditional kernel networking,
 mostly due to avoidance of context switches and data copies between
 kernel and user space, especially when processing lots of small
-packets which  happens often in the case of key-value stores such as
-memcached. Nonetheless these systems are far from perfect, having all
-the  networking code and the user application inside the same address
-space means that user code can corrupt the networking stack very
-easily. Development of such applications is also much more cumbersome
-than traditional kernel based approaches, indeed the user program must
-be notified of when buffers are not needed anymore in order to know
-when they can be freed or used again after passing them to the
-networking stack. This is usually done through callbacks, such as an
-\textbf{acked} callback, upon receiving a tcp ack from the remote
-host. The necessity to handle this kind of networking details make
-kernel bypass application much more time consuming and error-prone to
-develop than regular socket based ones. Another problem these kind of
-systems encounter is their inability to ensure safety, i.e.\ that data
-being held in the networking stack is not modified by the user program
+packets which often happens in the case of key-value stores such as
+memcached. Nonetheless these systems are far from perfect. First,
+having all the  networking code and the user application inside the
+same address space means that user code can corrupt the networking
+stack very easily. Secondly, development of such applications is also
+much more cumbersome than traditional kernel based approaches, indeed
+having the user program in the same address space as the networking
+code creates the need for it to be aware of low level networking
+details that traditional applications don't need to worry about.The
+necessity to handle this kind of networking details make kernel bypass
+application much more time consuming and error-prone to develop than
+regular socket based ones. Another problem these kind of systems
+encounter is their inability to ensure safety, i.e.\ that data being
+held in the networking stack is not modified by the user program
 (which still holds a pointer to it) while for example waiting for a
 TCP ACK.
 
 \subsection{Rust}
-We propose that Rust is a better suited language than C for kernel
-bypass networked applications. The safety guarantees Rust
+
+We make the claim that Rust is a better suited language than C for
+kernel bypass networked applications. The safety guarantees Rust
 brings are very well suited for this kind of applications, while the
 performance loss (if any) is negligible. As an additional benefit Rust
 allows code to be much more concise and abstract while drastically
-cutting down on the memory and concurrency bug tracking time. The
-memory management model of Rust will also prove invaluable when
-ensuring integrity of data in between the networking stack and the
-user application.
+cutting down on the memory and concurrency bug tracking time. Its
+memory management model will also prove invaluable when ensuring
+integrity of data in between the networking stack and the user
+application.
 
-As a proof-of-concept we implement a key-value store on top of
-DPDK in order to prove that it is doable as well as reasonable
-performance-wise to use Rust in this kind of scenario.
+As a proof of concept we implement a key-value store on top of
+DPDK in order to prove that it is doable as well as reasonable,
+performance-wise, to use Rust in this kind of scenario.
 
 \section{Rust}
+
 Rust is a systems programming language from Mozilla Research, stemming
 from Mozilla's dissatisfaction with C++. As of today several parts of
-Firefox's rendering engine, Servo, have been rewritten
-in Rust after the language was deemed mature enough to do so. Rust is
-engineered to  provide a lot of safety guarantees, notably memory and
-concurrency safety through its type system thereby eliminating a lot
-of common problems in systems programming. Most importantly, Rust's
-type system eliminates use-after-free, double-free, invalid pointers,
-memory leaks and data-races.
+Firefox's rendering engine, Servo, have been rewritten in Rust after
+the language was deemed mature enough to do so. Rust is engineered to
+provide a lot of safety guarantees, notably memory and concurrency
+safety through its type system thereby eliminating a lot of common
+problems in systems programming.
 
 The strong Rust guarantees also speed up development significantly by
-eliminating whole categories of bugs. Overall, the time writing code
-is increasing since often the compiler will straight out refuse to
-compile code that potentially violates its guarantees. The
-counter-part to this is that time spent debugging is very much
-reduced. This is particularly useful when tracking down data race bugs
-which are notoriously hard to diagnose. As an example, the Rust type
-system exposed a bug in the design of the store, that would been, if
-written in C, only apparent much later and very hard to track
-down. Indeed DPDK stores packet headers in the same buffer as the
-payload thus preventing sharing the packet buffer across threads. In C
-this is the kind of issue that takes lots of effort and time to locate
-and resolve. But that is, with the Rust guarantees, taken care of by
-the compiler and easily located and fixed.
+eliminating whole categories of bugs. Most importantly, Rust's type system
+eliminates use-after-free, double-free, invalid pointers, memory leaks
+and data-races. Overall, the time writing code is increasing since the
+compiler will often refuse straight out to compile code that
+potentially violates its guarantees. The counter-part to this is that
+the time spent debugging is very much reduced. This is particularly
+useful when tracking down data race bugs which are notoriously hard to
+diagnose. Those kind of bugs are usually found much later in the
+development cycle and are usually quite hard to reproduce since they
+depend on a certain scheduling of the execution.
 
 \subsection{Memory safety}
 
-Rust ensures memory safety through the use of reference and
-lifetimes. Raw pointers (such as that of C) can't be dereferenced
-except through the use of the \textbf{unsafe} keyword. References are
-guaranteed to always point to a valid memory location. Lifetimes are
-critical to ensuring that references are always valid, since they
-allow the compiler to tell when a reference might outlive the value it
-refers to. The combination of lifetimes and references thus eliminate
-the dangling pointers problem entirely as long as we don't use the
-\textbf{unsafe} feature of Rust.
+One of the most important feature of Rust is its guarantee of memory
+safety, providing both the speed of manual memory management and the
+safety of garbage collected languages.
 
-Lifetimes are also part of Rust's memory safety guarantees. Lifetimes
-are Rust's way of eliminating the need for garbage collection while
-not requiring users to manually manage memory. A lifetime gets
-attached to each variable created, the compiler then analyzes the
-control flow of the program to ensure that references or values
-derived from that first value (such as reference to a struct member)
-are not used after the value is destroyed.
+To provide this feature, Rust introduces a new concept called
+lifetimes and makes raw pointers second class citizens. These raw
+pointers (such as that of C) can't be dereferenced since the compiler
+can't guarantee that they are valid. Pointers are hard to validate and
+verify statically mostly because of pointer arithmetic. References, on
+the other hand, are guaranteed to always point to a valid memory
+location. Like the references in C++, references in Rust do not allow
+pointer arithmetic, they can only be created from a variable, which
+ensures that the referenced memory is valid.
+
+Lifetimes are the central part of Rust's memory safety
+guarantees. They work in conjunction with references to ensure
+that references are used correctly (i.e.\ not after the value they
+refer to has been destroyed), since they allow the compiler to tell
+when a reference might outlive the value it refers to. The combination
+of lifetimes and references thus eliminate the dangling pointers
+problem entirely. Lifetimes are Rust's way of eliminating the need for
+garbage collection while not requiring users to manually manage
+memory. A lifetime gets attached to each variable created, the
+compiler then analyzes the control flow of the program to ensure that
+references or values derived from that first value (such as reference
+to a struct member) are not used after the value is destroyed.
+
+However Rust is a at the core a systems programming language so we
+need some way to bypass the safety restrictions it provides. This is
+where the \textbf{unsafe} keyword comes in. This keyword provides a
+way to tell the Rust compiler that a piece of code upholds the memory
+safety guarantees even though the former can't verify it
+statically. Handling of raw pointers and call to foreign functions are
+cases where the use of \textbf{unsafe} is required. Indeed other
+languages do not provide any of Rust's guarantees and do not know
+about lifetimes.
+% ref to rust Kernel design paper and Rustonomicon
+% also ref to redox?
 
 \subsection{Concurrency safety}
-Rust also provides protection against data-races, a common problem
-when using C usually solved through atomic operations and locks.
-While it is possible to solve this kind of problems in C, it requires
-careful design and is an error-prone task. Rust therefore allows for
-quicker and safer concurrent software development. This safety does not
-come for free though. In order to guarantee that there is no data-race
-anywhere, Rust only allows either one mutable reference or any number
-of immutable reference to any given variable. By doing that, the
-compiler can ensure that the variable will only be read concurrently
-or written exclusively. Safe ways to mutate shared are also included
-in Rust. As an example the RwLock standard library structure allows
-creating mutable reference to a value from an immutable RwLock
-instance.
+
+Rust's type system also provides protection against data-races, a
+common problem when using C usually solved through atomic operations
+and locks. While it is possible to solve this kind of problems in C,
+it requires careful design and is an error-prone task. Rust therefore
+allows quicker and safer development of concurrent software. This safety
+does not come for free though. In order to guarantee that there is no
+data-race anywhere, Rust only allows either one mutable reference or
+any number of immutable reference to any given variable. By doing
+that, the compiler can ensure that the variable will only be read
+concurrently or written exclusively.
+
+Even though we speak of concurrency safety, Rust does not provide
+protection against deadlocks. This is a far too complex task for
+static analysis in a compiler since it requires graph analysis calls
+and sometimes produces false positives.
+% cite http://groups.csail.mit.edu/commit/papers/05/williams-ecoop05-slides.pdf
+
+However, the Rust standard library provides safe ways to mutate shared
+variables. As an example the RwLock standard library structure allows
+creating mutable reference to a value from an immutable RwLock instance.
 
 \subsection{Performance}
-Though providing lots of guarantees Rust actually has performance
-close (if not superior) to that of C. The Rust compiler makes use of
-the LLVM compiler infrastructure and therefore benefits from all the
-work done on the optimizer in the LLVM pipeline.
 
-Rustc also does some optimization of its own. The use of closures is very
-idiomatic in Rust. Usually (mostly in garbage collected languages)
-closure incur a pretty high performance cost, since they must be
-allocated on the heap and therefore are more expensive to call than
-regular functions. In Rust however, closures are most of the time
-inlined, and for generic functions the compiler can even specialize
-generic functions and generate code for each variant of the closure
-passed to the function.
+Being a systems programming language, performance is critical to
+Rust. All the aforementioned guarantees are enforced statically so
+they do not incur any performance penalty. Removing pointer aliasing
+from the language also allows the compiler to do many optimizations
+that are not feasible safely in C or C++. As to the performance of the
+generated assembly code, Rust utilizes the LLVM compiler
+infrastructure and thus benefits from all the work that was done
+there. Rust also features what the Rust developers call 0-cost
+abstraction. Idiomatic Rust makes heavy use of closures, and that
+would incur, in some languages, a slight degradation of
+performance. But, in Rust, closure can be, most of the time, inlined
+thus making as if the programmer wrote the concrete code while
+allowing the interface to remain abstract.
 
-Rust also features what the Rust developers call 0-cost abstraction,
-the closure inlining we talk about above is an example of 0-cost
-abstraction, an abstraction that simplifies and generalizes the code
-while incurring no runtime performance cost.
+In this regard, Rust combines the best of both worlds, high-level
+readable and abstract code while also having performance close to that
+of other systems programming languages.
 
 \section{Design}
 
-\subsection{Goals}
+\subsection{Goals} \label{design-goals}
+
 In order to be truly high-performance, the store should ideally
 support fast, lock-free and zero-copy insertion and retrieval. That
 means we need to come up with a concurrency control scheme to support
 concurrent lock-free updates. Since we don't need to provide strong
 consistency guarantees (other than being eventually consistent), we
-can rely on a optimistic multi version concurrency control scheme for
+can rely on an optimistic multi version concurrency control scheme for
 simplicity of implementation and speed.
 
 We should also provide an efficient and convenient interface to the
@@ -161,6 +188,7 @@ development of high-performance networking applications in Rust would
 be much simpler.
 
 \subsection{Local store} \label{design-overview}
+
 The first step in providing an efficient key-value store is to
 have an efficient hashmap to store and retrieve key value pairs
 rapidly once the request have been parsed. This also poses the
@@ -174,7 +202,8 @@ values from the hashmap concurrently with the hashmap being modified.
 We go with the following design. The top level table is a contiguous
 array of atomic pointers to overflow buckets. And in turn each
 overflow bucket is a pointer to a key-value pair structure allowing
-easy extraction of both keys and values, as show in \ref{fig:hashmap}.
+easy extraction of both keys and values, as shown in
+\hyperref[fig:hashmap]{figure~\ref*{fig:hashmap}}.
 
 \begin{figure}[h!]
   \includegraphics[width=\textwidth]{../diagram/amap1}
@@ -331,6 +360,7 @@ fails, i.e\. someone already swapped it with another value, we repeat
 the same process until the swap is successful.
 
 \subsection{Concurrency control}
+
 To build the AtomicBox abstraction we make use of the capability of
 Arc to be transformed into raw pointers, thus allowing a user to
 control exactly how long the memory on the heap lives. The reference
@@ -347,6 +377,7 @@ is then swapped independently from the one accessed by the GET
 request.
 
 \subsection{Memory management}
+
 Since they are to be shared amongst threads, all the hashmap
 components are allocated on the heap. As they are  all in the same
 size range (most of them consists only of one or two pointers), we
