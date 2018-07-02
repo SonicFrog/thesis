@@ -1,5 +1,6 @@
 \documentclass[11pt]{article}
 
+\usepackage{cite}
 \usepackage{color}
 \usepackage{graphicx}
 \usepackage[hidelinks]{hyperref}
@@ -7,6 +8,7 @@
 \usepackage{pdfpages}
 
 \graphicspath{{../diagram}{../graphs}}
+
 
 \author{Ogier Bouvier}
 \date{\today}
@@ -48,15 +50,15 @@ TCP ACK.
 
 \subsection{Rust}
 
-We make the claim that Rust is a better suited language than C for
-kernel bypass networked applications. The safety guarantees Rust
-brings are very well suited for this kind of applications, while the
-performance loss (if any) is negligible. As an additional benefit Rust
-allows code to be much more concise and abstract while drastically
-cutting down on the memory and concurrency bug tracking time. Its
-memory management model will also prove invaluable when ensuring
-integrity of data in between the networking stack and the user
-application.
+We make the claim that Rust~\cite{rustbook} is a better suited
+language than C for kernel bypass networked applications. The safety
+guarantees Rust brings are very well suited for this kind of
+applications, while the performance loss (if any) is negligible. As an
+additional benefit Rust allows code to be much more concise and
+abstract while drastically cutting down on the memory and concurrency
+bug tracking time. Its memory management model will also prove
+invaluable when ensuring integrity of data in between the networking
+stack and the user application.
 
 As a proof of concept we implement a key-value store on top of
 DPDK in order to prove that it is doable as well as reasonable,
@@ -115,13 +117,14 @@ to a struct member) are not used after the value is destroyed.
 
 However Rust is a at the core a systems programming language so we
 need some way to bypass the safety restrictions it provides. This is
-where the \textbf{unsafe} keyword comes in. This keyword provides a
-way to tell the Rust compiler that a piece of code upholds the memory
-safety guarantees even though the former can't verify it
-statically. Handling of raw pointers and call to foreign functions are
-cases where the use of \textbf{unsafe} is required. Indeed other
-languages do not provide any of Rust's guarantees and do not know
-about lifetimes.
+where the \textbf{unsafe}~\cite{rustonomicon} keyword comes in. This
+keyword provides a way to tell the Rust compiler that a piece of code
+upholds the memory safety guarantees even though the former can't
+verify it statically. Handling of raw pointers and call to foreign
+functions are cases where the use of \textbf{unsafe} is
+required. Indeed other languages do not provide any of Rust's
+guarantees and do not know about lifetimes. This problem also occurs
+when developing kernels~\cite{redox}.
 % ref to rust Kernel design paper and Rustonomicon
 % also ref to redox?
 
@@ -205,7 +208,7 @@ overflow bucket is a pointer to a key-value pair structure allowing
 easy extraction of both keys and values, as shown in
 \hyperref[fig:hashmap]{figure~\ref*{fig:hashmap}}.
 
-\begin{figure}[h!]
+\begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/amap1}
   \caption{Hashmap overview}
   \label{fig:hashmap}
@@ -219,7 +222,7 @@ does will not only reside in the hashmap itself but also in the
 networking stack while waiting for an ACK, as shown in
 \ref{fig:omvcc}.
 
-\begin{figure}[h!]
+\begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/cc1}
   \caption{Optimistic multi-version concurrency control}
   \label{fig:omvcc}
@@ -227,7 +230,7 @@ networking stack while waiting for an ACK, as shown in
 
 Let's now see how we are going to perform updates in the store.
 
-\begin{figure}[h!]
+\begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/amap2}
   \caption{Value insertion}
   \label{fig:omvcc-insert}
@@ -276,7 +279,7 @@ stack for retransmission, see~\ref{fig:cc2}. The data is then only
 referenced in the networking stack, and freed once it is successfully
 acknowledged.
 
-\begin{figure}[h!]
+\begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/cc2}
   \caption{Concurrent value removal}
   \label{fig:cc2}
@@ -454,12 +457,12 @@ to C functions must be in an unsafe block. A convenient safe Rust
 interface is therefore a must for speed and ease of development.
 
 \subsection{NetBricks}
-NetBricks is a Rust framework on top of DPDK, providing a clean and
-Rust-friendly API, as well as advanced packet processing facilities.
-It is, though, aimed at rapid development of network functions which
-does not quite fit our current target. A fork was therefore necessary
-to modify it to suit the particular needs of a host networking
-framework.
+NetBricks~\cite{netbricks} is a Rust framework on top of DPDK,
+providing a clean and Rust-friendly API, as well as advanced packet
+processing facilities. It is, though, aimed at rapid development of
+network functions which does not quite fit our current target. A fork
+was therefore necessary to modify it to suit the particular needs of a
+host networking framework.
 
 The fork comes with a few modifications to the NetBricks
 framework. The first one is the inability of packets to cross thread
@@ -641,6 +644,11 @@ networking framework in Rust for kernel bypass. Such a system would
 provide both the speed and the convenience of traditional socket based
 networking while also providing better networking performance and the
 safety of the Rust programming language.
+
+\newpage
+\pagenumbering{gobble}
+\bibliographystyle{plain}
+\bibliography{master}{}
 
 \end{document}
 %%% Local Variables:

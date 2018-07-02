@@ -1,0 +1,9 @@
+.gitignore
+
+FLAGS=-halt-on-error
+
+!mkgraph = |> ../graphs/gen.py %f |> %f_PUT.png %f_GET.png
+
+!mkpdf = |> ^ PDFLATEX %f ^ pdflatex $(FLAGS) %f; bibtex %B; \
+            pdflatex $(FLAGS) %f; pdflatex $(FLAGS) %f |> \
+                %B.pdf %B.log %B.aux %B.toc %B.out %B.bbl %B.blg
