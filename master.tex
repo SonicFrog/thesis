@@ -141,10 +141,10 @@ that, the compiler can ensure that the variable will only be read
 concurrently or written exclusively.
 
 Even though we speak of concurrency safety, Rust does not provide
-protection against deadlocks. This is a far too complex task for
-static analysis in a compiler since it requires graph analysis calls
-and sometimes produces false positives.
-% cite http://groups.csail.mit.edu/commit/papers/05/williams-ecoop05-slides.pdf
+protection against deadlocks. This is far too complex a task for
+static analysis in a compiler since it requires costly call graph
+analysis and sometimes produces false
+positives~\cite{deadlock-detection}.
 
 However, the Rust standard library provides safe ways to mutate shared
 variables. As an example the RwLock standard library structure allows
@@ -290,6 +290,7 @@ a typical workload on key-value stores implies a majority of reads
 compared to writes (the Facebook USR load is only 0.2\% writes), this
 won't be a problem in our target use case.
 
+% rephrase this section
 The case shown in~\ref{fig:omvcc} actually showcases how we handle
 data shared between the user program and the networking stack. Since
 we aim to provide a reliable networking protocol, at some point the
@@ -298,8 +299,8 @@ point the networking stack will hold on to the data until it is
 acknowledged by the other end. Our design even allows values to be
 removed from the hashmap while still being held in the networking
 stack for retransmission, see~\ref{fig:cc2}. The data is then only
-referenced in the networking stack, and freed once it is successfully
-acknowledged.
+referenced in the networking stack, and consequently freed once it is
+successfully acknowledged.
 
 \begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/cc2}
@@ -314,45 +315,81 @@ reference to that data). The problem of the user program still having
 the pointer to the data thus becomes a non-problem since the compiler
 ensures that the user program does not modify it.
 
-\subsection{UDP stack}
+\subsection{UDP stack} \label{sec:udp-design}
 
-One thing we need to consider also is the type of values that are
-gonna be stored in the hashmap. Indeed, the key and values of the
-hashmap are, in the end, going to be coming from the network. The
-actual key-value datastructure used is thus critically important,
-since it will be the interface for manipulating packet data in a
-zero-copy fashion.
+The core of this project is not the low level details of interfacing
+with a NIC or even the kernel bypass. We will thus use an existing
+framework to do that for us and build our networking on top of said
+framework.
 
-Since we will be in a run to completion execution model the standard
-socket API calls (recv and send) is not a possible API\@. We thus have
-a callback oriented UDP stack. When the user application creates a
-new socket on the stack, a callback is provided. This callback is then
-used when the networking stack receives a packet.
+As for the local store, the UDP stack should uphold the zero-copy
+property of the system. That means it should interface with the
+kernel-bypassing framework and extract data from that framework while
+not copying anything.
 
-\subsection{R2P2 interface}
+Kernel bypassing frameworks follow what is known as a run to
+completion model, the driver polls the NIC for incoming
+packets~\cite{dpdk-pmd} and hands them over to the user application in
+batches. This will influence the API design of the UDP stack and
+forbid the classic socket style API typically found in kernel
+networking stacks. Since we aim to provide a convenient and safe Rust
+API to the UDP stack we will need to come up with an alternative
+design.
 
-R2P2, the Request Response Pair Protocol, is a recent RPC protocol
-from EPFL's Datacenter Systems Laboratory. To allow for rapid testing
-and benchmarking, the choice was made to use R2P2 as an RPC protocol
-for our key value store.
+The run to completion model thus prompts a callback based API
+design. We thus have a callback oriented UDP stack. Since the
+framework polls the NIC for packets on its own this is
+appropriate. When the user application creates a new socket on the
+stack, it will provide a closure. Once a packet is received, its
+headers will be parsed and the UDP stack will dispatch to the
+appropriate socket registered earlier by the user application. Of
+course the callback provided by the user application should be
+reentrant since it will potentially be invoked from many threads
+concurrently.
 
-We provide an R2P2 interface for client interfacing. This R2P2 stack
-is the interface between the user application itself (the key-value
-store in our case) and the UDP networking stack and handles request
-parsing, response sending and retransmissions when needed.
+\subsection{R2P2 stack}
 
-As is typical in RTC packet processing models, tie-in to the user
-application will be handled through the use of callbacks. The user
-application registers its `RequestCallback' when initializing the R2P2
-stack.
+UDP does not provide any kind of reliable delivery of packets. We thus
+need some other protocol on top of UDP to provide reliable delivery of
+packets. R2P2, the Request Response Pair Protocol, is a highly
+scalable RPC protocol. We therefore chose to use a slightly modified
+version of R2P2. The published version of R2P2 does not provide
+reliable delivery, only load-balancing and request format. We
+therefore add explicit acknowledgement of responses from
+clients. Since client code and a benchmarking suite  already exist for
+R2P2, the choice was made to use it as an RPC protocol for our key value
+store.
 
-The stack then listens on incoming UDP packets, processing them as
-required. Packets are grouped request-wise into a HashMap while
-waiting for all packets in the request to be received. Once the
-request is complete the user registered callback is called on the
-complete request to produce a matching response. That response is then
-stored for potential retransmission while awaiting acknowledgement
-from the remote host.
+As stated in the design goals the R2P2 should provide an easy-to-use,
+reliable and zero-copy interface to user applications. This R2P2 stack is the
+interface between the user application itself (the key-value store in
+our case) and the UDP networking stack and handles request parsing,
+response sending and retransmissions when needed.
+
+The R2P2 stack will be implemented on top of the UDP stack described in
+section~\ref{sec:udp-design}. The API design of the R2P2 stack is
+therefore constrained by the design of the UDP stack. We thus make use
+of callback in the R2P2 stack. The R2P2 stack itself interfaces with
+the UDP stack by registered a callback invoked on each udp
+packet. Since R2P2 provides multi-packet requests, the R2P2 should
+handle reconstruction of requests. Since the user application will
+only care about handling complete requests the R2P2 stack will store
+packets and group by them by request and finally invoke the user
+provided callback once the whole request has been received and
+parsed. This callback should construct the response from the
+request. The R2P2 then handles transmitting the response to the client
+using the UDP stack.
+
+The R2P2 request is also responsible for the reliable delivery of
+responses. It should then hold on to responses produced by the user
+callback until they are acknowledged by the clients. In order to avoid
+duplicating work it should also identify when a request has already
+been processed by the user application and avoid processing this
+request again.
+
+\subsection{User program}
+
+
 
 \section{Implementation}
 
@@ -460,7 +497,8 @@ As you probably know, DPDK is a kernel-bypass networking framework
 developed by Intel, typically used for high-performance networking
 applications. To support true zero-copy we are required to use some
 form of kernel bypassing since the kernel networking is absolutely
-not zero-copy. We thus implement all our networking on top of DPDK.
+not zero-copy. We thus implement all our networking stack on top of
+DPDK.
 
 It is worth mentioning the Linux kernel socket flag for zero copy.
 Though it does not provide guaranteed zero copy sending/receiving a
@@ -608,6 +646,7 @@ performance of the local store.
 TODO: describe test machines
 
 \subsection{Local store}
+\label{sec:eval-local}
 
 We first evaluate how the local hashmap performance, especially when
 under a lot of load. We use UTF-8 string keys of 128 bytes with values
@@ -616,7 +655,7 @@ network. We generate a random workload for each of the 15 concurrent
 thread and start them simultaneously. Each thread performs one million
 GET and 1 million PUT request, on a previously initialized map.
 
-\subsubsection{No collisions balanced load}
+\subsubsection{No collisions, balanced load}
 
 We first establish the optimal performance we can expect from the
 hashmap by reducing the contention on the buckets, thus reducing the
@@ -628,7 +667,7 @@ inserted throughout the test, meaning the size of each bucket will
 stay constant.
 
 \begin{center}
-  \begin{tabular}{c c}
+  \begin{tabular}{c c} \label{table:nocol-balanced}
     \includegraphics[width=0.5\textwidth]{../csv/balanced_no_collision_PUT.pdf}
     &
       \includegraphics[width=0.5\textwidth]{../csv/balanced_no_collision_GET.pdf}
@@ -636,17 +675,19 @@ stay constant.
   \captionof{table}{Distribution of request durations}
 \end{center}
 
-\subsubsection{Artificial collision}
+\subsubsection{Artificial collision, balanced load}
 
-We now consider the case of a skewed and/or write heavy workload and
-evaluate the performance of the hashmap in this scenario. In order to
-simulate this, we reduce the number of buckets in the hashmap. This
-artificial collision indeed introduces contention between threads for
-buckets and will cause wasted work when two threads update the same
-bucket concurrently.
+OMVCC scheme are known for performing badly under write heavy
+workloads. So we now consider the case of a skewed and write heavy
+workload and evaluate the performance of the hashmap in this
+scenario. In order to simulate a skewed workload, we reduce the number
+of buckets in the hashmap. This will create lots of contention between
+threads for each buckets since the chance of two keys mapping to the
+same bucket is increased by a factor of 4. The test setup is, again,
+the same as described in section~\ref{sec:eval-local}.
 
 \begin{center}
-  \begin{tabular}{c c}
+  \begin{tabular}{c c} \label{table:col-balanced}
     \includegraphics[width=0.5\textwidth]{../csv/balanced_collision_PUT.pdf}
     &
       \includegraphics[width=0.5\textwidth]{../csv/balanced_collision_GET.pdf}
