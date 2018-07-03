@@ -1,7 +1,6 @@
 include_rules
 
-# removed until graphs are actually in the document
-#: foreach ../graphs/* |> ../gen.py %f -o %f |> %f_PUT.png %f_GET.png
+preload ../graphs
 
 : ../master.bib |> ln -s %f |> %B.bib
-: ../master.tex | master.bib ../diagram/* |> !mkpdf |>
+: ../master.tex | master.bib ../diagram/* ../csv/*.pdf |> !mkpdf |>

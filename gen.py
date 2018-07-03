@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.5
 
 import csv
 from math import ceil
@@ -50,7 +50,7 @@ def draw_graph(data, num_bins, save_to, type):
     ax.set_title("Histogram of " + type + " request time")
     fig.tight_layout()
     plt.show()
-    fig.savefig(save_to + "_" + type + ".png", bbox_inches='tight')
+    fig.savefig(save_to + "_" + type + ".pdf", bbox_inches='tight')
 
 if __name__ == '__main__':
     file = ""

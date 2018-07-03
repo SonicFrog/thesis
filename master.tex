@@ -1,5 +1,6 @@
 \documentclass[11pt]{article}
 
+\usepackage{caption}
 \usepackage{cite}
 \usepackage{color}
 \usepackage{graphicx}
@@ -430,7 +431,7 @@ Rust on top of DPDK.
 Let's start with an overview of the system as a whole before diving
 into the details of each individual piece.
 
-\begin{figure}
+\begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/overview}
   \caption{System overview}
   \label{fig:design-overview}
@@ -601,8 +602,8 @@ is bound to the lifetime of the packets actually containing them.
 
 \section{Evaluation}
 
-We now discuss the performance of our key-value against the USR
-Facebook workload.
+We will now evaluate the performance of the system as well as the
+performance of the local store.
 
 TODO: describe test machines
 
@@ -615,16 +616,25 @@ network. We generate a random workload for each of the 15 concurrent
 thread and start them simultaneously. Each thread performs one million
 GET and 1 million PUT request, on a previously initialized map.
 
-\subsubsection{No collisions}
+\subsubsection{No collisions balanced load}
 
 We first establish the optimal performance we can expect from the
-hashmap by reducing the contention on the bucket, thus reducing the
+hashmap by reducing the contention on the buckets, thus reducing the
 amount of wasted work by threads trying to swap out the buckets
 unsuccessfully. To this end, we allocate four times more buckets than
 they are keys and using a uniform distribution when generating
 workload. The set of keys is pre-determined and no new keys are
 inserted throughout the test, meaning the size of each bucket will
 stay constant.
+
+\begin{center}
+  \begin{tabular}{c c}
+    \includegraphics[width=0.5\textwidth]{../csv/balanced_no_collision_PUT.pdf}
+    &
+      \includegraphics[width=0.5\textwidth]{../csv/balanced_no_collision_GET.pdf}
+  \end{tabular}
+  \captionof{table}{Distribution of request durations}
+\end{center}
 
 \subsubsection{Artificial collision}
 
@@ -634,6 +644,15 @@ simulate this, we reduce the number of buckets in the hashmap. This
 artificial collision indeed introduces contention between threads for
 buckets and will cause wasted work when two threads update the same
 bucket concurrently.
+
+\begin{center}
+  \begin{tabular}{c c}
+    \includegraphics[width=0.5\textwidth]{../csv/balanced_collision_PUT.pdf}
+    &
+      \includegraphics[width=0.5\textwidth]{../csv/balanced_collision_GET.pdf}
+  \end{tabular}
+  \captionof{table}{Distribution of request durations with collision}
+\end{center}
 
 \subsection{Networked store}
 
