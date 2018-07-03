@@ -124,9 +124,7 @@ verify it statically. Handling of raw pointers and call to foreign
 functions are cases where the use of \textbf{unsafe} is
 required. Indeed other languages do not provide any of Rust's
 guarantees and do not know about lifetimes. This problem also occurs
-when developing kernels~\cite{redox}.
-% ref to rust Kernel design paper and Rustonomicon
-% also ref to redox?
+when developing kernels~\cite{redox}~\cite{rust-os}.
 
 \subsection{Concurrency safety}
 
@@ -175,38 +173,47 @@ of other systems programming languages.
 
 \subsection{Goals} \label{design-goals}
 
-In order to be truly high-performance, the store should ideally
-support fast, lock-free and zero-copy insertion and retrieval. That
-means we need to come up with a concurrency control scheme to support
-concurrent lock-free updates. Since we don't need to provide strong
-consistency guarantees (other than being eventually consistent), we
-can rely on an optimistic multi version concurrency control scheme for
-simplicity of implementation and speed.
+The goal here is to provide a zero-copy, in-memory, eventually
+consistent key-value store using kernel bypassing to support high
+throughput as well as low latency. The zero-copy property will allow
+our latency to remain the same regardless of the sizes of keys and
+values, though we can't say the same for the throughput since we will
+be limited by the capacity of the NIC in term of raw bandwidth.
 
-We should also provide an efficient and convenient interface to the
-network. This interface should also uphold the zero copy property that
-is provided by the store in order to provide a true zero copy
-key-value store. If we succeed in providing such an interface, further
-development of high-performance networking applications in Rust would
-be much simpler.
+Providing low latency and high throughput requires every component of
+the system to be fast and zero-copy. We therefore need a fast
+networking stack and obviously a high-performance and concurrent
+hashmap to store key-value entries as well as an efficient way to
+interface with the network interface controller that will send our
+packets on the wire. The choice of the networking protocol to transmit
+requests and responses is also quite important since it will be the
+central part of the system and will determine how much processing is
+necessary to receive and send packets.
+
+But creating a fast system is only part of the goal here. The
+networking code should be re-usable in order to facilitate further
+development of safe high-performance networking
+applications in Rust. Providing a convenient and clear API to the
+networking stack is therefore also a design goal. That means the API
+should follow idiomatic Rust interface design principles and leverage
+all the language features necessary to make it re-usable and generic.
 
 \subsection{Local store} \label{design-overview}
 
-The first step in providing an efficient key-value store is to
-have an efficient hashmap to store and retrieve key value pairs
-rapidly once the request have been parsed. This also poses the
-additional challenge of working within the limit of Rust's borrow
-checker and smart use of unsafe. Care was also taken to ensure that
-the resulting hashmap is suitable for zero-copy insertion and
-retrieval. This means that the ownership of values inside the hashmap
-has to be carefully managed to ensure client can retrieve and use
-values from the hashmap concurrently with the hashmap being modified.
+The central component of any key-value store is an efficient
+datastructure to store and retrieve values by their keys. Since we
+also aim to provide true zero-copy semantics, this datastructure
+should also avoid copying data around. Moreover, it should allow
+values to be retrieved and used concurrently with minimum overhead.
+A way to make values live outside of the store should also be provided
+in order to permit said values to be held in the networking stack
+after having been removed from the store.
 
-We go with the following design. The top level table is a contiguous
-array of atomic pointers to overflow buckets. And in turn each
-overflow bucket is a pointer to a key-value pair structure allowing
-easy extraction of both keys and values, as shown in
-\hyperref[fig:hashmap]{figure~\ref*{fig:hashmap}}.
+With all these constraints in mind, we go with the design shown
+in~\hyperref[fig:hashmap]{figure~\ref{fig:hashmap}}. The top level
+table is a contiguous array of atomic pointers to overflow
+buckets. And in turn each overflow bucket is a pointer to a key-value
+pair structure allowing fast, easy and zero-copy retrieval of values.
 
 \begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/amap1}
@@ -214,21 +221,34 @@ easy extraction of both keys and values, as shown in
   \label{fig:hashmap}
 \end{figure}
 
-The pointers inside each overflow buckets are atomically reference
-counted for multiple reasons. The first obvious one is that values
-live for an undetermined amount of time and are shared between
-multiple threads. The second reason is that the pointer to the data
-does will not only reside in the hashmap itself but also in the
-networking stack while waiting for an ACK, as shown in
-\ref{fig:omvcc}.
+To satisfy the constraints, each pointer inside each overflow bucket,
+as well as the pointers to the overflow buckets themselves are
+atomically reference counted. Since our key-value store will use many
+threads working concurrently to satisfy requests an atomic reference
+count is necessary to avoid race conditions when updating the
+reference count. But more importantly an atomic reference count allows
+values to be removed from the store while still being used elsewhere,
+as shown
+in~\hyperref[fig:value-sharing]{figure~\ref{fig:value-sharing}}.
 
 \begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/cc1}
-  \caption{Optimistic multi-version concurrency control}
-  \label{fig:omvcc}
+  \caption{Value sharing}
+  \label{fig:value-sharing}
 \end{figure}
 
-Let's now see how we are going to perform updates in the store.
+We should also, according to the constraints support lock-free and
+fast insertion or replacement of values while not interfering with
+concurrent retrievals. This is where making the pointers to the
+buckets atomic will come in handy. Insertions can then be done as
+follows, atomically retrieve the bucket the value we are inserting
+belongs in, increase its reference count to ensure it won't be freed
+concurrently. Then create a thread local copy of said bucket. At this
+point any concurrent retrieval request can still fetch the shared
+value of the bucket, so the insertion does not interfere with the
+retrieval. The inserting thread can then make the necessary
+modifications to its local copy of the bucket, as shown
+in~\ref{fig:omvcc-insert}.
 
 \begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/amap2}
@@ -236,21 +256,22 @@ Let's now see how we are going to perform updates in the store.
   \label{fig:omvcc-insert}
 \end{figure}
 
-We first copy the entire overflow bucket, as shown in
-~\ref{fig:omvcc-insert}. Since the overflow bucket is only made out of
-pointers this is not a costly operation. We also take care to increase
-the reference count of each pointer in the overflow bucket to avoid
-early frees of the values. Once we have our copy we build the new
-version of the overflow bucket locally. Once we have built the new
-version we attempt to swap it atomically inside the top-level
-table, ~\ref{fig:omvcc-swap}. If the compare and swap fails, we simply
-retry by fetching the new value and constructing our own once
-again. In the case where the swap is successful, the now-old value of
-the bucket may be in use by some concurrent read or write operation,
-we thus can't free it right away. This is where the choice of
-atomically reference counted pointers comes in handy. We just have to
-decrease the reference count of the old bucket, freeing it if we had
-the last reference to it.
+Once the local work is done, the inserting thread attempts to swap the
+value it constructed with the old one. Here, a compare and swap is
+necessary, since it is possible than another thread was modifying the
+same bucket concurrently and has already swapped the old value with
+the one it constructed. To avoid losing updates in the store it is
+therefore necessary to reconstruct the thread local value if the
+compare and swap was unsuccessful. If the swap was successful on the
+other hand, the thread that successfully swap the bucket must now
+decrease the reference count of the old bucket. Here, again, the
+atomic reference counts make sense since the old bucket could be in
+use by any number of other threads performing retrievals in this
+bucket. If we consider all the properties that the resulting hashmap
+has, we realize that it uses an optimistic multi-version concurrency
+control scheme. Optimistic, since each thread works on its own before
+attempting to synchronize with other threads, and multi-version since
+each bucket can have multiple versions in use at any given point.
 
 \begin{figure}
   \includegraphics[width=\textwidth]{../diagram/amap3}
@@ -258,17 +279,17 @@ the last reference to it.
   \label{fig:omvcc-swap}
 \end{figure}
 
-This lock-free design allows a fast and zero-copy insertion of values
-inside the hashmap. The most expensive operation for an insert is
-actually the atomic compare and swap. This can become a problem if
-there is a lot of threads competing for the same bucket concurrently
-since atomic operations can cause stalling. However this would be a
-problem only if the workload we are serving is a skewed write-heavy
-workload. Since a typical workload on key-value stores implies a
-majority of reads compared to writes (the Facebook USR load is only
-0.2\% writes), this won't be a problem in our target use case.
+This lock-free design allows a fast, concurrent and zero-copy
+insertion of values inside the hashmap. However in the case where the
+workload is write-heavy, an optimistic concurrency control scheme will
+result in a lot of wasted work as each thread will need to build
+the new version of the bucket multiple times. The most expensive
+operation for an insert is actually the atomic compare and swap. Since
+a typical workload on key-value stores implies a majority of reads
+compared to writes (the Facebook USR load is only 0.2\% writes), this
+won't be a problem in our target use case.
 
-The case shown in ~\ref{fig:omvcc} actually showcases how we handle
+The case shown in~\ref{fig:omvcc} actually showcases how we handle
 data shared between the user program and the networking stack. Since
 we aim to provide a reliable networking protocol, at some point the
 data will be passed to the networking stack for transmission. At this
