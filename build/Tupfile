@@ -1,6 +1,4 @@
 include_rules
 
-preload ../graphs
-
 : ../master.bib |> ln -s %f |> %B.bib
 : ../master.tex | master.bib ../diagram/* ../csv/*.pdf |> !mkpdf |>
