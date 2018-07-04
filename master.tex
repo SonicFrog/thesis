@@ -26,6 +26,8 @@
 \usepackage{setspace}
 \setstretch{1.1}
 
+\newcommand{\marios}[1]{\noindent{{\bf \fbox{MK:} {\textcolor{green}{\it#1}}}}}
+
 \makeatletter
 \setlength{\@fptop}{0pt}
 \makeatother
@@ -186,6 +188,10 @@
 
 \end{titlepage}
 
+\chapter*{Acknowledgements}
+\chapter*{Abstract}
+\marios{You need a short abstract that describes the problem, hints the solutions and gives some basic performance numbers.}
+
 \pagenumbering{gobble}
 \tableofcontents
 
@@ -193,7 +199,7 @@
 
 \pagenumbering{arabic}
 \setcounter{page}{1}
-\chapter{Abstract}
+\chapter{Introduction}
 
 The state of the art today for high-speed networking involves kernel
 bypassing techniques making use of software such as DPDK to reduce the
@@ -217,6 +223,16 @@ encounter is their inability to ensure safety, i.e.\ that data being
 held in the networking stack is not modified by the user program
 (which still holds a pointer to it) while for example waiting for a
 TCP ACK.
+
+\marios{You need a flat abstract without subsection where you clearly state the problem. "We need to eliminate copies in a KV-store's datapath. Thus we use language features to reason about data onwership." You mention that we use Rust for that without any details. You mention that the solution is for reliable transport protocols and we use R2P2 without getting into details. And then you state some basic performance numbers.}
+
+\chapter{Background}
+\marios{In this section we need to show you read and understood the area. This is where most of your references will come from.}
+\section{Kernel-bypassing}
+\marios{IX, Arrakis, DPDK, SPDK, NetBricks, etc. Why we do that? What's the benefit? Problems? Main applications? kv-stores. Thus, we can codesign the networking stack and the application.}
+
+\section{Transport protocols for RPCs}
+\marios{TCP, UDP, R2P2, reliable vs non reliable and implications to the application behaviour. Reliability is where copies come from. We need reliability though. Can we eliminate copies?}
 
 \section{Rust}
 
@@ -368,6 +384,8 @@ networking stack is therefore also a design goal. That means the API
 should follow idiomatic Rust interface design principles and leverage
 all the language features necessary to make it re-usable and generic.
 
+\marios{You need a layered diagram here starting from hardware all the way up to the application that lists the software componenets that you'll talk about later. Once you have that it's way cleaner to understand what are the following sections.}
+
 \section{Local store} \label{sec:local-store-design}
 
 The central component of any key-value store is an efficient
@@ -382,7 +400,7 @@ after having been removed from the store.
 With all these constraints in mind, we go with the design shown
 in~\hyperref[fig:hashmap]{figure~\ref{fig:hashmap}}. The top level
 table is a contiguous array of atomic pointers to overflow
-buckets. And in turn each overflow bucket is a pointer to a key-value
+buckets. And in turn each overflow bucket \marios{entry?} is a pointer to a key-value
 pair structure allowing fast, easy and zero-copy retrieval of values.
 
 \begin{figure}[htb!]
@@ -406,6 +424,8 @@ in~\hyperref[fig:value-sharing]{figure~\ref{fig:value-sharing}}.
   \caption{Value sharing}
   \label{fig:value-sharing}
 \end{figure}
+
+\marios{Pick 1,2 cases such as an update and a delete and walk the reader through it. It will be way cleaner this way. Make the example names bold so that someone will know and read for a key update for example.}
 
 We should also, according to the constraints support lock-free and
 fast insertion or replacement of values while not interfering with
@@ -456,7 +476,7 @@ result in a lot of wasted work as each thread will need to build
 the new version of the bucket multiple times. The most expensive
 operation for an insert is actually the atomic compare and swap. Since
 a typical workload on key-value stores implies a majority of reads
-compared to writes (the Facebook USR load is only 0.2\% writes), this
+compared to writes (the Facebook USR load is only 0.2\% writes)\marios{cite http://www.ece.eng.wayne.edu/~sjiang/pubs/papers/atikoglu12-memcached.pdf}, this
 won't be a problem in our target use case.
 
 % rephrase this section
@@ -483,6 +503,8 @@ holds an immutable reference to it, there can't be any mutable
 reference to that data). The problem of the user program still having
 the pointer to the data thus becomes a non-problem since the compiler
 ensures that the user program does not modify it.
+
+\marios{Follow the top-down design you started with. Talk about the kv-store next, R2P2, and then UDP.}
 
 \section{UDP stack} \label{sec:udp-design}
 
@@ -525,6 +547,7 @@ reentrant since it will potentially be invoked from many threads
 concurrently.
 
 \section{R2P2 stack}
+\marios{Most of this should be move to the background section. Here you only need the request response API to interface it with the application.}
 
 UDP does not provide any kind of reliable delivery of packets, so we
 need some other transport protocol on top of UDP to provide reliable
@@ -581,7 +604,7 @@ implementation, including how it ties into the Rust standard library
 and precisely how each component interfaces with the others.
 
 \section{Design overview}
-
+\marios{This is more or less the graph I told you to include at the beginning of the design section. This should not be part of the implementation.}
 Let's start with an overview of the system as a whole before diving
 into the details of each individual piece.
 
@@ -592,7 +615,7 @@ into the details of each individual piece.
 \end{figure}
 
 Each packet is first received by DPDK from the NIC\@. The packets are
-then processed through the NetBricks pipeline to be handed over to the
+then processed through the NetBricks \marios{you just introduced NetBricks here. You should do that in the background as an example of a kernel bypassed system that you will later use.} pipeline to be handed over to the
 UDP stack. The UDP stack then filters and matches packets to a given
 socket. Each socket has an associated callback registered by the
 user. In our case, the socket are created by the R2P2 server which
@@ -695,7 +718,7 @@ Let's now dive into the networking layer of the system starting with
 the lower layer, that is the interfacing with DPDK.
 
 \subsection{DPDK} \todo{rephrase section}
-
+\marios{First baragraph goes in the background.}
 As you probably know, DPDK is a kernel-bypass networking framework
 developed by Intel, typically for high-performance networking
 applications. We thus implement all our networking stack on top of
@@ -712,7 +735,7 @@ is therefore a must for speed and ease of development.
 
 
 \subsection{NetBricks}
-
+\marios{Same here. Move the first paragraph in the background section 2 and talk only about the modifications here.}
 NetBricks~\cite{netbricks} is a Rust framework on top of DPDK,
 providing a clean and Rust-friendly API, as well as advanced packet
 processing facilities, while only incurring a small performance hit
@@ -885,7 +908,7 @@ performance of the local store.
 The server benchmarks are run on an Intel Xeon E5-2637 @ 3.50 Ghz
 machines with 64 GB of RAM\@. The machines also use Intel 82599ES
 10-Gigabit NICs.
-
+\marios{Add more details about the setup. Linux and DPDK version, Rust version etc.}
 
 \section{Local store}
 \label{sec:eval-local}
@@ -954,14 +977,7 @@ the same as described in section~\ref{sec:eval-local}.
   \label{fig:latency-distribution}
 \end{figure}
 
-\chapter{Conclusion}
-
-We hope to have provided an easy to use and clear API to build upon
-our system. We also think that we have proved that Rust is a valid
-language to build kernel bypass networking in. \todo{speak about the
-  actual performance}
-
-\section{Further work}
+\chapter{Further work}
 
 We finish by mentioning what features are missing or could be useful
 in such a piece of software. We have provided a UDP stack on top of
@@ -982,6 +998,13 @@ provide both the speed and the convenience of traditional socket based
 networking while also providing better networking performance and the
 safety of the Rust programming language. \todo{complete kernel bypass
  networking framework in Rust}
+
+\chapter{Conclusion}
+
+We hope to have provided an easy to use and clear API to build upon
+our system. We also think that we have proved that Rust is a valid
+language to build kernel bypass networking in. \todo{speak about the
+  actual performance}
 
 \pagenumbering{gobble}
 \bibliographystyle{plain}
