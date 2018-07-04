@@ -6,6 +6,6 @@ FLAGS=-halt-on-error -interaction=batchmode
 
 !mkgraph = |> ^ GEN GRAPH ^ ../graphs/gen.py %f |> %f_PUT.pdf %f_GET.pdf
 
-!mkpdf = |> ^ PDFLATEX %f ^ pdflatex $(FLAGS) %f; bibtex %B; \
+!mkpdf = |> ^ PDFLATEX %f ^ pdflatex $(FLAGS) %f; bibtex -terse %B; \
             pdflatex $(FLAGS) %f; pdflatex $(FLAGS) %f |> \
                 %B.pdf %B.log %B.aux %B.toc %B.out %B.bbl %B.blg %B.tdo

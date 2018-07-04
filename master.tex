@@ -526,12 +526,12 @@ concurrently.
 
 \section{R2P2 stack}
 
-UDP does not provide any kind of reliable delivery of packets. We thus
-need some other protocol on top of UDP to provide reliable delivery of
-packets. R2P2, the Request Response Pair Protocol, is a highly
-scalable RPC protocol. We therefore chose to use a slightly modified
-version of R2P2. The published version of R2P2 does not provide
-reliable delivery, only load-balancing and request format. We
+UDP does not provide any kind of reliable delivery of packets, so we
+need some other transport protocol on top of UDP to provide reliable
+delivery of packets. R2P2, the Request Response Pair Protocol, is a
+highly scalable RPC protocol. We therefore chose to use a slightly
+modified version of R2P2. The published version of R2P2 does not
+provide reliable delivery, only load-balancing and request format. We
 therefore add explicit acknowledgement of responses from
 clients. Since client code and a benchmarking suite  already exist for
 R2P2, the choice was made to use it as an RPC protocol for our key
@@ -687,6 +687,8 @@ respect to size will be coming directly from DPDK allocating memory
 buffers from Linux's \textbf{hugepages} and thus won't affect the
 heap.
 
+\todo{Explain how the hashmap is built on top of AtomicBox}
+
 \section{Networking}
 
 Let's now dive into the networking layer of the system starting with
@@ -708,10 +710,13 @@ Rust. Since C code has none of the guarantees of Rust calls to C
 functions must be in an unsafe block. A convenient safe Rust interface
 is therefore a must for speed and ease of development.
 
+
 \subsection{NetBricks}
+
 NetBricks~\cite{netbricks} is a Rust framework on top of DPDK,
 providing a clean and Rust-friendly API, as well as advanced packet
-processing facilities. It is, though, aimed at rapid development of
+processing facilities, while only incurring a small performance hit
+compared plain DPDK. It is, though, aimed at rapid development of
 network functions which does not quite fit our current target. A fork
 was therefore necessary to modify it to suit the particular needs of a
 host networking framework. An example of the NetBricks packet
@@ -878,6 +883,9 @@ We will now evaluate the performance of the system as well as the
 performance of the local store.
 
 The server benchmarks are run on an Intel Xeon E5-2637 @ 3.50 Ghz
+machines with 64 GB of RAM\@. The machines also use Intel 82599ES
+10-Gigabit NICs.
+
 
 \section{Local store}
 \label{sec:eval-local}
@@ -908,7 +916,7 @@ stay constant.
     &
       \includegraphics[width=0.5\textwidth]{../csv/balanced_no_collision_GET.pdf}
   \end{tabular}
-  \captionof{table}{Distribution of request durations}
+  \captionof{figure}{Distribution of request durations}
 \end{center}
 
 \subsection{Artificial collision, balanced load}
@@ -928,7 +936,7 @@ the same as described in section~\ref{sec:eval-local}.
     &
       \includegraphics[width=0.5\textwidth]{../csv/balanced_collision_GET.pdf}
   \end{tabular}
-  \captionof{table}{Distribution of request durations with collision}
+  \captionof{figure}{Distribution of request durations with collision}
 \end{center}
 \todo{More test setups?}
 
@@ -950,7 +958,8 @@ the same as described in section~\ref{sec:eval-local}.
 
 We hope to have provided an easy to use and clear API to build upon
 our system. We also think that we have proved that Rust is a valid
-language to build kernel bypass networking in.
+language to build kernel bypass networking in. \todo{speak about the
+  actual performance}
 
 \section{Further work}
 
@@ -974,7 +983,6 @@ networking while also providing better networking performance and the
 safety of the Rust programming language. \todo{complete kernel bypass
  networking framework in Rust}
 
-\newpage
 \pagenumbering{gobble}
 \bibliographystyle{plain}
 \bibliography{master}{}
