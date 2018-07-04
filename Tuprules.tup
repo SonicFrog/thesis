@@ -1,11 +1,11 @@
 .gitignore
 
-FLAGS=-halt-on-error
+FLAGS=-halt-on-error -interaction=batchmode
 
 !fetch = |> ^ WGET %f ^ wget -O %o |>
 
-!mkgraph = |> ../graphs/gen.py %f |> %f_PUT.png %f_GET.png
+!mkgraph = |> ^ GEN GRAPH ^ ../graphs/gen.py %f |> %f_PUT.pdf %f_GET.pdf
 
 !mkpdf = |> ^ PDFLATEX %f ^ pdflatex $(FLAGS) %f; bibtex %B; \
             pdflatex $(FLAGS) %f; pdflatex $(FLAGS) %f |> \
-                %B.pdf %B.log %B.aux %B.toc %B.out %B.bbl %B.blg
+                %B.pdf %B.log %B.aux %B.toc %B.out %B.bbl %B.blg %B.tdo

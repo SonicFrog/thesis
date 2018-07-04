@@ -188,7 +188,8 @@
 
 \pagenumbering{gobble}
 \tableofcontents
-\newpage
+
+\listoftodos{}
 
 \pagenumbering{arabic}
 \setcounter{page}{1}
@@ -536,11 +537,12 @@ clients. Since client code and a benchmarking suite  already exist for
 R2P2, the choice was made to use it as an RPC protocol for our key
 value store.
 
-As stated in the design goals the R2P2 should provide an easy-to-use,
-reliable and zero-copy interface to user applications. This R2P2 stack is the
-interface between the user application itself (the key-value store in
-our case) and the UDP networking stack and handles request parsing,
-response sending and retransmissions when needed.
+As stated in the design goals the R2P2 stack should provide an
+easy-to-use, reliable and zero-copy interface to user
+applications. This R2P2 stack is the interface between the user
+application itself (the key-value store in our case) and the UDP
+networking stack and handles request parsing, response sending and
+retransmissions when needed.
 
 The R2P2 stack will be implemented on top of the UDP stack described in
 section~\ref{sec:udp-design}. The API design of the R2P2 stack is
@@ -578,7 +580,7 @@ We now discuss how our abstract design translates into a concrete Rust
 implementation, including how it ties into the Rust standard library
 and precisely how each component interfaces with the others.
 
-\subsection{Design overview}
+\section{Design overview}
 
 Let's start with an overview of the system as a whole before diving
 into the details of each individual piece.
@@ -687,41 +689,26 @@ heap.
 
 \section{Networking}
 
-\subsubsection{UDP}
-
 Let's now dive into the networking layer of the system starting with
-the lower layer, that is the UDP stack.
+the lower layer, that is the interfacing with DPDK.
 
-\begin{figure}[htb!]
-  \lstinputlisting{../code/udp-sock.rs}
-  \label{code:socket-registration}
-  \caption{UDP stack public interface}
-\end{figure}
-
-The bind method shown in figure~\ref{code:socket-registration} allows
-users to bind socket on a given UdpStack. The user provides the IP
-address to listen on as well as the UDP port. In order to receive
-incoming packets the user also provides a closure that will be called
-every time a packet is read from the NIC by the UdpStack. The stack
-will actually transfer ownership of the packets received to the
-callback, thereby permitting the zero copy networking stack we are
-aiming for.
-
-\subsubsection{DPDK} \todo{rephrase section according to Marios' suggestions}
+\subsection{DPDK} \todo{rephrase section}
 
 As you probably know, DPDK is a kernel-bypass networking framework
-developed by Intel, typically used for high-performance networking
+developed by Intel, typically for high-performance networking
 applications. We thus implement all our networking stack on top of
-DPDK.
+DPDK. It provides drivers for Intel NICs and high-performance packet
+management and allocation, as well as lots of networking related
+libraries.
 
 DPDK being written in C, we must first find some (ideally, convenient)
-bindings allowing us to make calls into DPDK from Rust code. One more
+bindings allowing us to make calls into DPDK from Rust code. Another
 thing to consider is the inherent unsafety in calling C code from
 Rust. Since C code has none of the guarantees of Rust calls to C
 functions must be in an unsafe block. A convenient safe Rust interface
 is therefore a must for speed and ease of development.
 
-\subsubsection{NetBricks} \todo{rephrase section}
+\subsection{NetBricks}
 NetBricks~\cite{netbricks} is a Rust framework on top of DPDK,
 providing a clean and Rust-friendly API, as well as advanced packet
 processing facilities. It is, though, aimed at rapid development of
@@ -755,32 +742,40 @@ ReceiveBatch::new(queue.clone())
   \caption{UDP packet pipeline}
 \end{figure}
 
-The fork comes with a few modifications to the NetBricks
-framework. The first one is the inability of packets to cross thread
-boundaries. Indeed since NetBricks is geared towards network functions
-the packets are only meant to be processed by the user defined
-pipeline and is deallocated after it has gone through the whole
-pipeline. To remedy this we create the CrossPacket abstraction which
-can be created from the standard NetBricks Packet and is able to cross
-thread boundaries by being immutable. But we still need to be able to
-send packets through NetBricks and NetBricks does not know how to
-handle CrossPackets. It is therefore possible to convert a CrossPacket
-to a Packet as well as the reverse.
+In order to adapt NetBricks to end-host networking, the fork comes
+with a few modifications in packet management. The first one is the
+inability of packets to cross thread boundaries. Indeed since
+NetBricks is geared towards network functions the packets are only
+meant to be processed by the user defined pipeline and be freed as
+soon as they have gone through the pipeline. To remedy this we create
+the CrossPacket abstraction which can be created from the standard
+NetBricks Packet and is able to cross thread boundaries by being
+immutable. But we still need to be able to send packets through
+NetBricks and NetBricks does not know how to handle CrossPackets. It
+is therefore possible to convert a CrossPacket to a Packet as well as
+the reverse.
 
-The CrossPacket abstraction only contains a single immutable raw
-pointers to a DPDK mbuf. This means that CrossPackets can be shared
-across threads without the Rust compiler getting in the way. However
-since the pointer to the mbuf is immutable this poses a problem when
-sending the packet. Indeed DPDK stores headers in the same buffer as
-the payload, meaning we can't easily send the same payload
-concurrently to two different destination. The way to solve this is
-make use of DPDK's mbuf chaining, the first mbuf in the chain being
-local to the current thread (therefore being mutable) and the second
-one being the immutable payload shared between threads. This is the
-second notable modification we make to our NetBricks fork, the ability
-to chain mbufs to maintain the immutability of the packets we received
-from the network while maintaining the ability to send them
-concurrently to different destinations.
+\begin{figure}[htb!]
+  \lstinputlisting{../code/cp.rs}
+  \caption{CrossPacket abstraction}
+  \label{code:crosspacket}
+\end{figure}
+
+The CrossPacket abstraction is the way we work within the limits of
+the Rust type system. NetBricks' \textbf{Packet}s are, by default,
+mutable meaning the Rust compiler will not allow them to cross thread
+boundaries in order to prevent data races. However since the
+pointer to the mbuf is immutable this poses a problem when sending the
+packet. Indeed DPDK stores headers in the same buffer as the payload,
+meaning we can't easily send the same payload concurrently to two
+different destination. The way to solve this is make use of DPDK's
+mbuf chaining, the first mbuf in the chain being local to the current
+thread (therefore being mutable) and the second one being the
+immutable payload shared between threads. This is the second notable
+modification we make to our NetBricks fork, the ability to chain mbufs
+to maintain the immutability of the packets we received from the
+network while also having the possibility to send them concurrently to
+different destinations.
 
 One more thing that needs to be implemented in NetBricks is packets
 living longer than the packet processing pipeline. Since NetBricks is
@@ -801,31 +796,43 @@ needed anymore. The problem here is that mbuf reference counts are not
 atomic, this is a problem in our case since the same payload could be
 sent from two different threads which will both need to increment
 it. That means we need to wrap the actual payload and provide an
-atomic reference counting capability.
+atomic reference counting capability to prevent mbufs from beeing
+freed too early.
 
-\subsubsection{UDP stack} \todo{rephrase section}
-
-The first step in the development of the key value store is obviously
-to have some networking support. The choice of UDP makes sense in term
-of ease and speed of development given the time constraints of the
-project. Moreover, as we will see later on, the use of R2P2 (which
-uses UDP as a transport protocol) as an RPC protocol makes a
-working UDP stack a requirement.
+\subsection{UDP stack}
 
 The UDP stack ties in to NetBricks by registering a pipeline on all
-available cores and using this pipeline to dispatch packets to the
+available cores and using each pipeline to dispatch packets to the
 correct socket. Each socket is stored in a hashmap in the stack by its
 port. Upon receiving a packet the stack filters in multiple steps the
 packets dropping invalid ones and routing the others to the correct
 socket. The corresponding callback is then called on the packets one
 by one.
 
-The sending part of the networking stack uses a round-robin approach
-and selects a different queue for each batch of packets. A more
-sophisticated approach could be envisaged to avoid flooding a specific
-port queue.
+\begin{figure}[htb!]
+  \lstinputlisting{../code/udp-sock.rs}
+  \label{code:socket-registration}
+  \caption{UDP stack public interface}
+\end{figure}
 
-\subsubsection{R2P2 server} \todo{rephrase section}
+The bind method shown in figure~\ref{code:socket-registration} allows
+users to bind socket on a given UdpStack. The user provides the IP
+address to listen on as well as the UDP port. In order to receive
+incoming packets the user also provides a closure that will be called
+every time a packet is read from the NIC by the UdpStack. The stack
+will actually transfer ownership of the packets received to the
+callback, thereby permitting the zero copy networking stack we are
+aiming for.
+
+The send method on the other hand does not need to transfer ownership
+of the packets to the UDP stack, because it does not need to keep the
+packets after sending them. Therefore it only borrows the Packet the
+user wants to send. After which it creates a segmented DPDK packet to
+allow sending the same packet concurrently to different destinations.
+To avoid flooding the same RX ring, send() uses a simple round-robin
+approach to select the output queue.
+
+\subsection{R2P2 server} \todo{rephrase section}
 
 We use a variant of the R2P2 protocol that adds active acknowledgement
 from clients in order to reduce latency when packets are dropped. For
@@ -845,7 +852,7 @@ acknowledgement. The response returned by the user callback is stored
 in the R2P2 server while waiting for the acknowledgement and
 retransmitted if need be.
 
-\subsubsection{Key value store}
+\subsection{Key value store}
 
 The key-value store uses a simplified version of the Redis
 protocol. It only supports SET and GET requests, since the test
@@ -865,6 +872,7 @@ the mbufs. The problem here is that mbufs reference counts are not
 atomic (they're plain 16 bits integer).
 
 \chapter{Evaluation}
+\label{chap:evaluation}
 
 We will now evaluate the performance of the system as well as the
 performance of the local store.
@@ -924,8 +932,8 @@ the same as described in section~\ref{sec:eval-local}.
 
 \section{Networked store}
 
-\todo{Throughput / latency graph}
-\todo{Tail latency evaluation}
+\missingfigure{Throughput / latency graph}
+\missingfigure{Latency histogram}
 
 \chapter{Conclusion}
 
@@ -953,9 +961,7 @@ networking framework in Rust for kernel bypass. Such a system would
 provide both the speed and the convenience of traditional socket based
 networking while also providing better networking performance and the
 safety of the Rust programming language. \todo{complete kernel bypass
-  networking framework in Rust}
-
-
+ networking framework in Rust}
 
 \newpage
 \pagenumbering{gobble}
