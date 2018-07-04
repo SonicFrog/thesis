@@ -877,7 +877,7 @@ atomic (they're plain 16 bits integer).
 We will now evaluate the performance of the system as well as the
 performance of the local store.
 
-\todo{Describe test machines}
+The server benchmarks are run on an Intel Xeon E5-2637 @ 3.50 Ghz
 
 \section{Local store}
 \label{sec:eval-local}
@@ -886,8 +886,10 @@ We first evaluate how the local hashmap performance, especially when
 under a lot of load. We use UTF-8 string keys of 128 bytes with values
 of 64 bits to simulate only copying pointers to packets from the
 network. We generate a random workload for each of the 15 concurrent
-thread and start them simultaneously. Each thread performs one million
-GET and 1 million PUT request, on a previously initialized map.
+thread and start them simultaneously. To avoid scheduling overhead
+each thread is bound to a physical through the Linux core affinity
+API\@. Each workload is made of one million GET and 1 million PUT
+request, on a previously initialized map.
 
 \subsection{No collisions, balanced load}
 
@@ -932,8 +934,17 @@ the same as described in section~\ref{sec:eval-local}.
 
 \section{Networked store}
 
-\missingfigure{Throughput / latency graph}
-\missingfigure{Latency histogram}
+\begin{figure}[htb!]
+  \missingfigure{Throughput / latency graph}
+  \caption{Latency as a function of throughput}
+  \label{fig:latency-throughput}
+\end{figure}
+
+\begin{figure}[htb!]
+  \missingfigure{Latency histogram}
+  \caption{Latency distribution}
+  \label{fig:latency-distribution}
+\end{figure}
 
 \chapter{Conclusion}
 
