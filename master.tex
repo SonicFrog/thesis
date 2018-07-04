@@ -1,15 +1,132 @@
-\documentclass[11pt]{article}
+\documentclass[11pt]{book}
 
+\usepackage[english]{babel}
 \usepackage{caption}
 \usepackage{cite}
 \usepackage{color}
+\usepackage[T1]{fontenc}
 \usepackage{graphicx}
+\usepackage[utf8]{inputenc}
 \usepackage[hidelinks]{hyperref}
 \usepackage{listings}
+\usepackage{listings-rust}
 \usepackage{pdfpages}
+\usepackage{todonotes}
+
+\setlength{\textwidth}{146.8mm} % = 210mm - 37mm - 26.2mm
+\setlength{\oddsidemargin}{11.6mm} % 37mm - 1in (from hoffset)
+\setlength{\evensidemargin}{0.8mm} % = 26.2mm - 1in (from hoffset)
+\setlength{\topmargin}{-2.2mm} % = 0mm -1in + 23.2mm
+\setlength{\textheight}{221.9mm} % = 297mm -29.5mm -31.6mm - 14mm (12 to accomodate footline with pagenumber)
+\setlength{\headheight}{14pt}
+\setlength{\parindent}{0pt}
 
 \graphicspath{{../diagram}{../graphs}}
 
+\usepackage{setspace}
+\setstretch{1.1}
+
+\makeatletter
+\setlength{\@fptop}{0pt}
+\makeatother
+
+\usepackage{fancyhdr}
+\renewcommand{\sectionmark}[1]{\markright{\thesection\ #1}}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+\fancyhead[OR]{\bfseries \nouppercase{\rightmark}}
+\fancyhead[EL]{\bfseries \nouppercase{\leftmark}}
+\fancyfoot[EL,OR]{\thepage}
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
+  \fancyfoot[EL,OR]{\thepage}}
+\fancypagestyle{addpagenumbersforpdfimports}{
+  \fancyhead{}
+  \renewcommand{\headrulewidth}{0pt}
+  \fancyfoot{}
+  \fancyfoot[RO,LE]{\thepage}
+}
+
+\usepackage{tikz}
+\usepackage[explicit]{titlesec}
+\newcommand*\chapterlabel{}
+% \renewcommand{\thechapter}{\Roman{chapter}}
+\titleformat{\chapter}[display]  % type (section,chapter,etc...) to vary,  shape (eg display-type)
+{\normalfont\bfseries\Huge} % format of the chapter
+{\gdef\chapterlabel{\thechapter\ }}     % the label
+{0pt} % separation between label and chapter-title
+{\begin{tikzpicture}[remember picture,overlay]
+    \node[yshift=-8cm] at (current page.north west)
+    {\begin{tikzpicture}[remember picture, overlay]
+        \draw[fill=black] (0,0) rectangle(35.5mm,15mm);
+        \node[anchor=north east,yshift=-7.2cm,xshift=34mm,minimum height=30mm,inner sep=0mm] at (current page.north west)
+        {\parbox[top][30mm][t]{15mm}{\raggedleft $\phantom{\textrm{l}}$\color{white}\chapterlabel}};  %the black l is just to get better base-line alingement
+        \node[anchor=north west,yshift=-7.2cm,xshift=37mm,text width=\textwidth,minimum height=30mm,inner sep=0mm] at (current page.north west)
+        {\parbox[top][30mm][t]{\textwidth}{\color{black}#1}};
+      \end{tikzpicture}
+    };
+  \end{tikzpicture}
+  \gdef\chapterlabel{}
+} % code before the title body
+
+\titlespacing*{\chapter}{0pt}{50pt}{30pt}
+\titlespacing*{\section}{0pt}{13.2pt}{*0}  % 13.2pt is line spacing for a text with 11pt font size
+\titlespacing*{\subsection}{0pt}{13.2pt}{*0}
+\titlespacing*{\subsubsection}{0pt}{13.2pt}{*0}
+
+\newcounter{myparts}
+\newcommand*\partlabel{}
+\titleformat{\part}[display]  % type (section,chapter,etc...) to vary,  shape (eg display-type)
+{\normalfont\bfseries\Huge} % format of the part
+{\gdef\partlabel{\thepart\ }}     % the label
+{0pt} % separation between label and part-title
+{\setlength{\unitlength}{20mm}
+  \addtocounter{myparts}{1}
+  \begin{tikzpicture}[remember picture,overlay]
+    \node[anchor=north west,xshift=-65mm,yshift=-6.9cm-\value{myparts}*20mm] at (current page.north east) % for unknown reasons: 3mm missing -> 65 instead of 62
+    {\begin{tikzpicture}[remember picture, overlay]
+        \draw[fill=black] (0,0) rectangle(62mm,20mm);   % -\value{myparts}\unitlength
+        \node[anchor=north west,yshift=-6.1cm-\value{myparts}*20mm,xshift=-60.5mm,minimum height=30mm,inner sep=0mm] at (current page.north east)
+        {\parbox[top][30mm][t]{55mm}{\raggedright \color{white}Part \partlabel $\phantom{\textrm{l}}$}};  %the phantom l is just to get better base-line alingement
+        \node[anchor=north east,yshift=-6.1cm-\value{myparts}*20mm,xshift=-63.5mm,text width=\textwidth,minimum height=30mm,inner sep=0mm] at (current page.north east)
+        {\parbox[top][30mm][t]{\textwidth}{\raggedleft \color{black}#1}};
+      \end{tikzpicture}
+    };
+  \end{tikzpicture}
+  \gdef\partlabel{}
+} % code before the title body
+
+\usepackage{etoolbox}
+\let\bbordermatrix\bordermatrix
+\patchcmd{\bbordermatrix}{8.75}{4.75}{}{}
+\patchcmd{\bbordermatrix}{\left(}{\left[}{}{}
+    \patchcmd{\bbordermatrix}{\right)}{\right]}{}{}
+\usepackage{amsmath}
+% Fix the problem with delimiter size caused by fourier and amsmath packages.
+\makeatletter
+\def\resetMathstrut@{%
+  \setbox\z@\hbox{%
+    \mathchardef\@tempa\mathcode`\(\relax
+    \def\@tempb##1"##2##3{\the\textfont"##3\char"}%
+    \expandafter\@tempb\meaning\@tempa \relax
+  }%
+  \ht\Mathstrutbox@1.2\ht\z@ \dp\Mathstrutbox@1.2\dp\z@
+}
+\makeatother
+
+\lstset{
+  backgroundcolor=\color{white},
+  basicstyle=\footnotesize,
+  breaklines=false,
+  deletekeywords= {stack},
+  language=Rust,
+  frame=single,
+  keywordstyle=\color{green},
+}
 
 \author{Ogier Bouvier}
 \date{\today}
@@ -17,14 +134,66 @@
 
 \begin{document}
 
-\maketitle
+\begin{titlepage}
+	\newcommand{\HRule}{\rule{\linewidth}{0.5mm}} % Defines a new command for the horizontal lines, change thickness here
+	\center
+
+\LARGE \textsc{École Polytechnique Fédérale de Lausanne}
+\vspace{1cm}
+
+\LARGE Master Thesis
+\vspace{2cm}
+
+	{
+		\HRule \\[0.5cm]
+		\Huge A zero copy key-value store in Rust}
+	\HRule \\[1cm]
+
+	\vspace{2cm}
+	\begin{minipage}[t]{0.4\textwidth}
+		\begin{flushleft} \large
+			\textbf{Author} \\
+			Ogier \textsc{Bouvier}\\
+			\textit{ogier.bouvier@epfl.ch}
+		\end{flushleft}
+	\end{minipage}
+	~
+	\begin{minipage}[t]{0.4\textwidth}
+		\begin{flushright} \large
+				{\large \today}
+		\end{flushright}
+	\end{minipage}\\[1cm]
+
+	\begin{minipage}[t]{0.4\textwidth}
+		\begin{flushleft} \large
+		\textbf{Supervisors} \\
+			Prof. Edouard \textsc{Bugnion}\\
+			DCSL | EPFL \\
+			\textit{edouard.bugnion@epfl.ch} \\
+			Marios \textsc{Kogias}\\
+			DCSL | EPFL \\
+			\textit{marios.kogias@epfl.ch}
+			\end{flushleft}
+	\end{minipage}
+
+	\begin{figure}[h]
+		\begin{minipage}[t]{\textwidth}
+				\includegraphics[width=4cm]{../diagram/epfl.pdf}
+		\end{minipage}
+		\hfill
+	\end{figure}
+
+	%\vfill % Fill the rest of the page with whitespace
+
+\end{titlepage}
+
 \pagenumbering{gobble}
 \tableofcontents
 \newpage
 
 \pagenumbering{arabic}
 \setcounter{page}{1}
-\section{Abstract}
+\chapter{Abstract}
 
 The state of the art today for high-speed networking involves kernel
 bypassing techniques making use of software such as DPDK to reduce the
@@ -49,7 +218,7 @@ held in the networking stack is not modified by the user program
 (which still holds a pointer to it) while for example waiting for a
 TCP ACK.
 
-\subsection{Rust}
+\section{Rust}
 
 We make the claim that Rust~\cite{rustbook} is a better suited
 language than C for kernel bypass networked applications. The safety
@@ -87,7 +256,7 @@ diagnose. Those kind of bugs are usually found much later in the
 development cycle and are usually quite hard to reproduce since they
 depend on a certain scheduling of the execution.
 
-\subsection{Memory safety}
+\section{Memory safety}
 
 One of the most important feature of Rust is its guarantee of memory
 safety, providing both the speed of manual memory management and the
@@ -121,13 +290,13 @@ need some way to bypass the safety restrictions it provides. This is
 where the \textbf{unsafe}~\cite{rustonomicon} keyword comes in. This
 keyword provides a way to tell the Rust compiler that a piece of code
 upholds the memory safety guarantees even though the former can't
-verify it statically. Handling of raw pointers and call to foreign
-functions are cases where the use of \textbf{unsafe} is
+verify  statically that it does. Handling of raw pointers and call to
+foreign functions are cases where the use of \textbf{unsafe} is
 required. Indeed other languages do not provide any of Rust's
 guarantees and do not know about lifetimes. This problem also occurs
-when developing kernels~\cite{redox}~\cite{rust-os}.
+when developing kernels~\cite{rust-os}~\cite{redox}.
 
-\subsection{Concurrency safety}
+\section{Concurrency safety}
 
 Rust's type system also provides protection against data-races, a
 common problem when using C usually solved through atomic operations
@@ -150,7 +319,7 @@ However, the Rust standard library provides safe ways to mutate shared
 variables. As an example the RwLock standard library structure allows
 creating mutable reference to a value from an immutable RwLock instance.
 
-\subsection{Performance}
+\section{Performance}
 
 Being a systems programming language, performance is critical to
 Rust. All the aforementioned guarantees are enforced statically so
@@ -170,9 +339,9 @@ In this regard, Rust combines the best of both worlds, high-level
 readable and abstract code while also having performance close to that
 of other systems programming languages.
 
-\section{Design}
+\chapter{Design}
 
-\subsection{Goals} \label{design-goals}
+\section{Goals} \label{design-goals}
 
 The goal here is to provide a zero-copy, in-memory, eventually
 consistent key-value store using kernel bypassing to support high
@@ -199,7 +368,7 @@ networking stack is therefore also a design goal. That means the API
 should follow idiomatic Rust interface design principles and leverage
 all the language features necessary to make it re-usable and generic.
 
-\subsection{Local store} \label{design-overview}
+\section{Local store} \label{sec:local-store-design}
 
 The central component of any key-value store is an efficient
 datastructure to store and retrieve values by their keys. Since we
@@ -217,7 +386,7 @@ buckets. And in turn each overflow bucket is a pointer to a key-value
 pair structure allowing fast, easy and zero-copy retrieval of values.
 
 \begin{figure}[htb!]
-  \includegraphics[width=\textwidth]{../diagram/amap1}
+  \includegraphics[width=\textwidth]{../diagram/amap1.pdf}
   \caption{Hashmap overview}
   \label{fig:hashmap}
 \end{figure}
@@ -252,7 +421,7 @@ modifications to its local copy of the bucket, as shown
 in~\ref{fig:omvcc-insert}.
 
 \begin{figure}[htb!]
-  \includegraphics[width=\textwidth]{../diagram/amap2}
+  \includegraphics[width=\textwidth]{../diagram/amap2.pdf}
   \caption{Value insertion}
   \label{fig:omvcc-insert}
 \end{figure}
@@ -275,7 +444,7 @@ attempting to synchronize with other threads, and multi-version since
 each bucket can have multiple versions in use at any given point.
 
 \begin{figure}
-  \includegraphics[width=\textwidth]{../diagram/amap3}
+  \includegraphics[width=\textwidth]{../diagram/amap3.pdf}
   \caption{Bucket swapping}
   \label{fig:omvcc-swap}
 \end{figure}
@@ -303,24 +472,32 @@ referenced in the networking stack, and consequently freed once it is
 successfully acknowledged.
 
 \begin{figure}[htb!]
-  \includegraphics[width=\textwidth]{../diagram/cc2}
+  \includegraphics[width=\textwidth]{../diagram/cc2.pdf}
   \caption{Concurrent value removal}
   \label{fig:cc2}
 \end{figure}
 
-On another note, Rust's concurrency guarantees ensure that data held
+On a related note, Rust's concurrency guarantees ensure that data held
 in the networking stack can't be modified (since the networking stack
 holds an immutable reference to it, there can't be any mutable
 reference to that data). The problem of the user program still having
 the pointer to the data thus becomes a non-problem since the compiler
 ensures that the user program does not modify it.
 
-\subsection{UDP stack} \label{sec:udp-design}
+\section{UDP stack} \label{sec:udp-design}
 
 The core of this project is not the low level details of interfacing
 with a NIC or even the kernel bypass. We will thus use an existing
 framework to do that for us and build our networking on top of said
 framework.
+
+It is worth mentioning the Linux kernel socket flag for zero copy.
+Though it does not provide guaranteed zero copy sending/receiving a
+port of nginx using it saw a 9\% increase in performance with minimal
+code changes. The choice was made not to use it, since it would
+eliminate one of the most interesting aspect of the project, the
+ability to have a safe userspace networking stack in the same address
+space as the user program.
 
 As for the local store, the UDP stack should uphold the zero-copy
 property of the system. That means it should interface with the
@@ -347,7 +524,7 @@ course the callback provided by the user application should be
 reentrant since it will potentially be invoked from many threads
 concurrently.
 
-\subsection{R2P2 stack}
+\section{R2P2 stack}
 
 UDP does not provide any kind of reliable delivery of packets. We thus
 need some other protocol on top of UDP to provide reliable delivery of
@@ -357,8 +534,8 @@ version of R2P2. The published version of R2P2 does not provide
 reliable delivery, only load-balancing and request format. We
 therefore add explicit acknowledgement of responses from
 clients. Since client code and a benchmarking suite  already exist for
-R2P2, the choice was made to use it as an RPC protocol for our key value
-store.
+R2P2, the choice was made to use it as an RPC protocol for our key
+value store.
 
 As stated in the design goals the R2P2 should provide an easy-to-use,
 reliable and zero-copy interface to user applications. This R2P2 stack is the
@@ -380,88 +557,27 @@ parsed. This callback should construct the response from the
 request. The R2P2 then handles transmitting the response to the client
 using the UDP stack.
 
-The R2P2 request is also responsible for the reliable delivery of
+The R2P2 layer is also responsible for the reliable delivery of
 responses. It should then hold on to responses produced by the user
 callback until they are acknowledged by the clients. In order to avoid
-duplicating work it should also identify when a request has already
-been processed by the user application and avoid processing this
-request again.
+duplicating work, and thereby reducing both latency and throughput,
+it should also identify when a request has already been processed by
+the user application and avoid processing this request again.
 
-\subsection{User program}
+\section{Key-value store}
 
+The key-value store is what would be considered as the user
+application. As such it will provide an example of how to use the
+system. It is the last layer of the system and should not rely on any
+details of the lower layers of the networking stack. Its role in the
+system while be to process individual R2P2 request and parse them
+using the application layer protocol.
 
-
-\section{Implementation}
+\chapter{Implementation}
 
 We now discuss how our abstract design translates into a concrete Rust
 implementation, including how it ties into the Rust standard library
-and what are the individual components of each part of the system.
-
-\subsection{AtomicBox}
-
-Unfortunately the rust standard library only provides a mean to
-atomically swap raw pointers using the \textbf{AtomicPtr}
-construct. This effectively forces us to make use of raw pointers,
-thus not benefiting from any of Rust's memory safety guarantee and
-potentially leading to memory corruption or leaks.
-
-This leads to the \textbf{AtomicBox} abstraction, a safe wrapper
-around \textbf{AtomicPtr}, that we use to build our OMVCC hashmap.
-The AtomicBox makes use of X86 CAS instructions to improve on Arc.
-Arc provides an atomic reference count and AtomicBox provides an
-atomic reference count as well the possibility to atomically swap that
-value. Since every value is atomically reference counted it will stay
-allocated as long as any reference to it still exists while allowing
-new requests to fetch the newer value to do their work. Updates are
-made using the value atomically fetched at that point in time,
-creating a copy, modifying it as appropriate and then swapping it back
-with the old one. If the swap succeeds the old value's reference count
-is decreased (and dropped if we had the last reference), effectively
-providing an optimistic multi-version concurrency control. If the swap
-fails, i.e\. someone already swapped it with another value, we repeat
-the same process until the swap is successful.
-
-\subsection{Concurrency control}
-
-To build the AtomicBox abstraction we make use of the capability of
-Arc to be transformed into raw pointers, thus allowing a user to
-control exactly how long the memory on the heap lives. The reference
-can then be transformed back into an Arc, though since we make use of
-raw pointers this requires using \textbf{unsafe}.
-
-This means our AtomicBox abstraction also handles atomic reference
-counting of the values it contains. Meaning that the values live as
-long as there exists a reference to them anywhere. We thus have an
-optimistic multi-version concurrency control scheme. A concurrent GET
-and PUT therefore do not interfere with each other since the GET will
-fetch a version of the bucket while the PUT will create a new one that
-is then swapped independently from the one accessed by the GET
-request.
-
-\subsection{Memory management}
-
-Since they are to be shared amongst threads, all the hashmap
-components are allocated on the heap. As they are  all in the same
-size range (most of them consists only of one or two pointers), we
-make the claim that memory fragmentation is not gonna be an issue in
-our case. Indeed most of the heavy allocation are coming from DPDK
-allocating memory buffers from Linux's \textbf{hugepages} and thus
-won't affect the heap.
-
-\subsection{UDP}
-
-We also aim to provide an efficient easy to use UDP stack on top of
-NetBricks to facilitate development of other applications. This UDP
-stack should use callbacks to hand over packets to the user program.
-
-\section{Networking}
-
-In this section we will delve in the networking part of the key-value
-store, highlighting the Rust-DPDK interfacing as well as the different
-APIs that we provide on top of said interface and how they
-interconnect to form the final key-value store. We will also talk
-about the challenges of providing a true zero-copy networking stack in
-Rust on top of DPDK.
+and precisely how each component interfaces with the others.
 
 \subsection{Design overview}
 
@@ -469,12 +585,12 @@ Let's start with an overview of the system as a whole before diving
 into the details of each individual piece.
 
 \begin{figure}[htb!]
-  \includegraphics[width=\textwidth]{../diagram/overview}
+  \includegraphics[width=\textwidth]{../diagram/overview.pdf}
   \caption{System overview}
   \label{fig:design-overview}
 \end{figure}
 
-Each packet is first received by DPDK from the NIC. The packets are
+Each packet is first received by DPDK from the NIC\@. The packets are
 then processed through the NetBricks pipeline to be handed over to the
 UDP stack. The UDP stack then filters and matches packets to a given
 socket. Each socket has an associated callback registered by the
@@ -487,42 +603,159 @@ store. The key-value store uses R2P2 to satisfy requests in the Redis
 protocol. This is also where our hashmap comes in (though it is used
 all across the system), to store the key value pairs.
 
-Let's now dive into more gory details about each part individually.
+\section{OptiMap} \label{sec:optimap-impl}
 
-% TODO: diagram of how each piece is tied together
+OptiMap is the name for the highly concurrent hashmap, described in
+section~\ref{sec:local-store-design}, and we now will see how exactly
+the design translates into a concrete Rust implementation.
 
-\subsection{DPDK}
+\subsection{AtomicBox}
+
+As stated in section~\ref{sec:local-store-design}, we need some way to
+atomically swap values while also atomically reference counting them.
+Unfortunately the rust standard library only provides a mean to
+atomically swap raw pointers using the \textbf{AtomicPtr}
+construct. This effectively forces us to make use of raw pointers,
+thus not benefiting from any of Rust's memory safety guarantee and
+potentially leading to memory corruption or leaks. Even though we are
+forced to use unsafe, Rust still provides strong safety guarantees and
+debugging time is still very much reduced since we know for sure that
+memory corruption problems are located inside \textbf{unsafe} code
+blocks.
+
+\begin{figure}[htb!]
+  \lstinputlisting{../code/abox.rs}
+  \caption{The AtomicBox structure}
+\end{figure}
+
+This leads us to the \textbf{AtomicBox} abstraction, a safe wrapper
+around \textbf{AtomicPtr}, that we will use to build our OMVCC
+hashmap. The AtomicBox makes use of X86 CAS instructions to improve on
+Arc. Arc provides an atomic reference count and AtomicBox provides an
+atomic reference count as well the possibility to atomically swap that
+value. Since every value is atomically reference counted it will stay
+allocated as long as any reference to it still exists while allowing
+new requests to fetch the newer value to do their work. Updates are
+made using the value atomically fetched at that point in time,
+creating a copy, modifying it as appropriate and then swapping it back
+with the old one. If the swap succeeds the old value's reference count
+is decreased (and dropped if we had the last reference), effectively
+providing an optimistic multi-version concurrency control. If the swap
+fails, i.e.\ someone already swapped it with another value, we repeat
+the same process until the swap is successful.
+
+To build the AtomicBox abstraction we make use of the capability of
+Arc to be transformed into raw pointers, thus allowing a user to
+control exactly how long the memory on the heap lives, including the
+value outliving the AtomicBox instance. The reference can then be
+transformed back into an Arc, although this requires using
+\textbf{unsafe} since we turn arbitrary pointers into Arc instances
+therefore introducing a risk of double-free or invalid memory
+accesses.
+
+\begin{figure}[htb!]
+  \label{code:atomicbox-interface}
+  \lstinputlisting{../code/abox_take.rs}
+  \caption{AtomicBox public interface}
+\end{figure}
+
+The AtomicBox abstraction allows us to implement the optimistic
+multi-version concurrency control scheme. Indeed, the AtomicBox allows
+users to extract an Arc to the value referenced by the AtomicPtr it
+contains. We can thus extract values from the AtomicBox and keep them
+even when they are removed from the AtomicPtr as shown in
+figure~\ref{code:atomicbox-interface}.
+
+The public interface provided by AtomicBox aims to be simple, fast and
+safe, hiding the unsafe details of the actual operation. We therefore
+provide an idiomatic way to update the value as well as a clean way to
+fetch the value. Updates are handled through closures, the user passes
+a closure to the AtomicBox which will apply this closure to the
+current value and then atomically replace the old value with the new
+one. In order to allow the value contained in the AtomicBox to outlive
+it, when getting the value we actually provide an Arc<T> to the user
+making the allocation of the value itself independent from the
+allocation of the AtomicBox.
+
+Since they are to be shared amongst threads, all the hashmap
+components are allocated on the heap, thus justifying our use of
+Arcs. As all elements are of small size (most of them are one or two
+pointers big), we make the claim that memory fragmentation is not
+gonna be an issue in our case. Indeed most of the allocation with
+respect to size will be coming directly from DPDK allocating memory
+buffers from Linux's \textbf{hugepages} and thus won't affect the
+heap.
+
+\section{Networking}
+
+\subsubsection{UDP}
+
+Let's now dive into the networking layer of the system starting with
+the lower layer, that is the UDP stack.
+
+\begin{figure}[htb!]
+  \lstinputlisting{../code/udp-sock.rs}
+  \label{code:socket-registration}
+  \caption{UDP stack public interface}
+\end{figure}
+
+The bind method shown in figure~\ref{code:socket-registration} allows
+users to bind socket on a given UdpStack. The user provides the IP
+address to listen on as well as the UDP port. In order to receive
+incoming packets the user also provides a closure that will be called
+every time a packet is read from the NIC by the UdpStack. The stack
+will actually transfer ownership of the packets received to the
+callback, thereby permitting the zero copy networking stack we are
+aiming for.
+
+\subsubsection{DPDK}
 
 As you probably know, DPDK is a kernel-bypass networking framework
 developed by Intel, typically used for high-performance networking
-applications. To support true zero-copy we are required to use some
-form of kernel bypassing since the kernel networking is absolutely
-not zero-copy. We thus implement all our networking stack on top of
+applications. We thus implement all our networking stack on top of
 DPDK.
-
-It is worth mentioning the Linux kernel socket flag for zero copy.
-Though it does not provide guaranteed zero copy sending/receiving a
-port of nginx using it saw a 9\% increase in performance with minimal
-code changes. We chose not to use it though, since it would eliminate
-one of the most interesting aspect of the project, the ability to have
-a safe userspace networking stack in the same address space as the
-user program.
 % insert ref to paper
 
-Since DPDK is written in C, we must first find some (ideally,
-convenient) bindings allowing us to make calls into DPDK from Rust
-code. One more thing to consider is the inherent unsafety in calling C
-code from Rust. Since C code has none of the guarantees of Rust calls
-to C functions must be in an unsafe block. A convenient safe Rust
-interface is therefore a must for speed and ease of development.
+DPDK being written in C, we must first find some (ideally, convenient)
+bindings allowing us to make calls into DPDK from Rust code. One more
+thing to consider is the inherent unsafety in calling C code from
+Rust. Since C code has none of the guarantees of Rust calls to C
+functions must be in an unsafe block. A convenient safe Rust interface
+is therefore a must for speed and ease of development.
 
-\subsection{NetBricks}
+\subsubsection{NetBricks}
 NetBricks~\cite{netbricks} is a Rust framework on top of DPDK,
 providing a clean and Rust-friendly API, as well as advanced packet
 processing facilities. It is, though, aimed at rapid development of
 network functions which does not quite fit our current target. A fork
 was therefore necessary to modify it to suit the particular needs of a
-host networking framework.
+host networking framework. An example of the NetBricks packet
+processing is shown in figure~\ref{code:udp-pipeline}.
+
+\begin{figure}[htb!]
+\begin{lstlisting}
+ReceiveBatch::new(queue.clone())
+    .parse::<MacHeader>()
+    .parse::<IpHeader>()
+    .metadata(box move |pkt|{
+        // keep the source ip around for later replies
+        pkt.get_header().src()
+    })
+    .parse::<UdpHeader>()
+    .map(box move |pkt| {
+        let src_addr = Ipv4Addr::from(*pkt.read_metadata());
+        let src_port = pkt.get_header().dst_port();
+
+        stack.sockets.get(&src_port).map(|sock| {
+             sock.deliver(&pkt, src_addr, src_port)
+        });
+    })
+    .compose()
+\end{lstlisting}
+
+  \label{code:udp-pipeline}
+  \caption{UDP packet pipeline}
+\end{figure}
 
 The fork comes with a few modifications to the NetBricks
 framework. The first one is the inability of packets to cross thread
@@ -563,7 +796,7 @@ pipeline. We make use of mbuf reference counts to do this. In our
 segmented packets the headers always have a reference count of one,
 indeed they are not needed once the packet has been sent successfully,
 thus we let DPDK free them once the packet have gone through the
-NIC. The payload on the other hand should not be deallocated after
+NIC\@. The payload on the other hand should not be deallocated after
 sending, so we set its reference count to 2, thereby preventing DPDK
 from freeing it. But we still need to free them once they are not
 needed anymore. The problem here is that mbuf reference counts are not
@@ -572,7 +805,7 @@ sent from two different threads which will both need to increment
 it. That means we need to wrap the actual payload and provide an
 atomic reference counting capability.
 
-\subsection{UDP stack}
+\subsubsection{UDP stack}
 The first step in the development of the key value store is obviously
 to have some networking support. The choice of UDP makes sense in term
 of ease and speed of development given the time constraints of the
@@ -593,7 +826,7 @@ and selects a different queue for each batch of packets. A more
 sophisticated approach could be envisaged to avoid flooding a specific
 port queue.
 
-\subsection{R2P2 server}
+\subsubsection{R2P2 server}
 
 We use a variant of the R2P2 protocol that adds active acknowledgement
 from clients in order to reduce latency when packets are dropped. For
@@ -613,16 +846,16 @@ acknowledgement. The response returned by the user callback is stored
 in the R2P2 server while waiting for the acknowledgement and
 retransmitted if need be.
 
-\subsection{Key value store}
+\subsubsection{Key value store}
 
 The key-value store uses a simplified version of the Redis
 protocol. It only supports SET and GET requests, since the test
 workload has no other type of requests.
 
-The Redis server implementation interfaces with the R2P2 server through
-the request callback registration mechanism. It then handles
-construction of the actual value that will be stored in the
-hashmap. The requirements for the actual hashmap value and key
+\todo{Describe how we build keys and values from the raw Packets}
+
+It then handles construction of the actual value that will be stored
+in the hashmap. The requirements for the actual hashmap value and key
 datastructures are mostly to play nice with the Rust memory management
 model and DPDK mbufs. Indeed since we use segmented packets, we need
 the headers to be freed once the request has been satisfied but the
@@ -632,18 +865,12 @@ different threads we need some sort of atomic reference counting on
 the mbufs. The problem here is that mbufs reference counts are not
 atomic (they're plain 16 bits integer).
 
-This leads us to the \textbf{Payload} abstraction. This structure combines a
-convenient access to the value and key, but also the mbufs containing
-that value and key. Since the structure contains the packet
-themselves the Rust compiler ensures that access to the key and value
-is bound to the lifetime of the packets actually containing them.
-
 \section{Evaluation}
 
 We will now evaluate the performance of the system as well as the
 performance of the local store.
 
-TODO: describe test machines
+\todo{Describe test machines}
 
 \subsection{Local store}
 \label{sec:eval-local}
@@ -694,10 +921,12 @@ the same as described in section~\ref{sec:eval-local}.
   \end{tabular}
   \captionof{table}{Distribution of request durations with collision}
 \end{center}
+\todo{More test setups?}
 
 \subsection{Networked store}
 
-TODO once the R2P2 stack is working
+\todo{Throughput / latency graph}
+\todo{Tail latency evaluation}
 
 \section{Conclusion}
 
@@ -718,13 +947,16 @@ case we respond to a request, so we have both the source and
 destination MAC addresses at hand. But in the case where we want to
 send a packet to an arbitrary IP we need to figure out the destination
 MAC address. This is where an ARP protocol handler would come in
-handy.
+handy. \todo{IPv6}
 
 With an ARP and TCP stack we would be close to a full featured
 networking framework in Rust for kernel bypass. Such a system would
 provide both the speed and the convenience of traditional socket based
 networking while also providing better networking performance and the
-safety of the Rust programming language.
+safety of the Rust programming language. \todo{complete kernel bypass
+  networking framework in Rust}
+
+
 
 \newpage
 \pagenumbering{gobble}

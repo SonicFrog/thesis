@@ -1,4 +1,7 @@
 include_rules
 
+export TEXINPUTS=".."
+
+: ../listings-rust.sty |> ln -s %f |> %B.sty
 : ../master.bib |> ln -s %f |> %B.bib
-: ../master.tex | master.bib ../diagram/* ../csv/*.pdf |> !mkpdf |>
+: ../master.tex | listings-rust.sty master.bib ../diagram/*.pdf ../csv/*.pdf |> !mkpdf |>
