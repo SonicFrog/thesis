@@ -135,55 +135,54 @@
 \begin{document}
 
 \begin{titlepage}
-	\newcommand{\HRule}{\rule{\linewidth}{0.5mm}} % Defines a new command for the horizontal lines, change thickness here
-	\center
+  \newcommand{\HRule}{\rule{\linewidth}{0.5mm}} % Defines a new command for the horizontal lines, change thickness here
+  \center
 
-\LARGE \textsc{École Polytechnique Fédérale de Lausanne}
-\vspace{1cm}
+  \LARGE \textsc{École Polytechnique Fédérale de Lausanne}
+  \vspace{1cm}
 
-\LARGE Master Thesis
-\vspace{2cm}
+  \LARGE Master Thesis
+  \vspace{2cm}
 
-	{
-		\HRule \\[0.5cm]
-		\Huge A zero copy key-value store in Rust}
-	\HRule \\[1cm]
+  {
+    \HRule \\[0.5cm]
+    \Huge A zero copy key-value store in Rust}
+  \HRule \\[1cm]
 
-	\vspace{2cm}
-	\begin{minipage}[t]{0.4\textwidth}
-		\begin{flushleft} \large
-			\textbf{Author} \\
-			Ogier \textsc{Bouvier}\\
-			\textit{ogier.bouvier@epfl.ch}
-		\end{flushleft}
-	\end{minipage}
-	~
-	\begin{minipage}[t]{0.4\textwidth}
-		\begin{flushright} \large
-				{\large \today}
-		\end{flushright}
-	\end{minipage}\\[1cm]
+  \begin{minipage}[t]{0.4\textwidth}
+    \large
+    {\large \today}
+  \end{minipage}\\[1cm]
 
-	\begin{minipage}[t]{0.4\textwidth}
-		\begin{flushleft} \large
-		\textbf{Supervisors} \\
-			Prof. Edouard \textsc{Bugnion}\\
-			DCSL | EPFL \\
-			\textit{edouard.bugnion@epfl.ch} \\
-			Marios \textsc{Kogias}\\
-			DCSL | EPFL \\
-			\textit{marios.kogias@epfl.ch}
-			\end{flushleft}
-	\end{minipage}
+  \vspace{2cm}
 
-	\begin{figure}[h]
-		\begin{minipage}[t]{\textwidth}
-				\includegraphics[width=4cm]{../diagram/epfl.pdf}
-		\end{minipage}
-		\hfill
-	\end{figure}
+  \begin{tabular}{c c}
+    \begin{minipage}[t]{0.4\textwidth}
+      \begin{flushleft} \large
+        \textbf{Author} \\
+        Ogier \textsc{Bouvier}\\
+        \textit{ogier.bouvier@epfl.ch}
+      \end{flushleft}
+    \end{minipage}
 
-	%\vfill % Fill the rest of the page with whitespace
+    \begin{minipage}[t]{0.4\textwidth}
+      \begin{flushright} \large
+        \textbf{Supervisors} \\
+        Prof. Edouard \textsc{Bugnion}\\
+        DCSL | EPFL \\
+        \textit{edouard.bugnion@epfl.ch} \\
+        Marios \textsc{Kogias}\\
+        DCSL | EPFL \\
+        \textit{marios.kogias@epfl.ch}
+      \end{flushright}
+    \end{minipage}
+  \end{tabular}
+
+  \begin{center}
+    \begin{figure}[h]
+      \includegraphics[width=0.71\textwidth]{../diagram/epfl.pdf}
+    \end{figure}
+  \end{center}
 
 \end{titlepage}
 
@@ -708,13 +707,12 @@ will actually transfer ownership of the packets received to the
 callback, thereby permitting the zero copy networking stack we are
 aiming for.
 
-\subsubsection{DPDK}
+\subsubsection{DPDK} \todo{rephrase section according to Marios' suggestions}
 
 As you probably know, DPDK is a kernel-bypass networking framework
 developed by Intel, typically used for high-performance networking
 applications. We thus implement all our networking stack on top of
 DPDK.
-% insert ref to paper
 
 DPDK being written in C, we must first find some (ideally, convenient)
 bindings allowing us to make calls into DPDK from Rust code. One more
@@ -723,7 +721,7 @@ Rust. Since C code has none of the guarantees of Rust calls to C
 functions must be in an unsafe block. A convenient safe Rust interface
 is therefore a must for speed and ease of development.
 
-\subsubsection{NetBricks}
+\subsubsection{NetBricks} \todo{rephrase section}
 NetBricks~\cite{netbricks} is a Rust framework on top of DPDK,
 providing a clean and Rust-friendly API, as well as advanced packet
 processing facilities. It is, though, aimed at rapid development of
@@ -805,7 +803,8 @@ sent from two different threads which will both need to increment
 it. That means we need to wrap the actual payload and provide an
 atomic reference counting capability.
 
-\subsubsection{UDP stack}
+\subsubsection{UDP stack} \todo{rephrase section}
+
 The first step in the development of the key value store is obviously
 to have some networking support. The choice of UDP makes sense in term
 of ease and speed of development given the time constraints of the
@@ -826,7 +825,7 @@ and selects a different queue for each batch of packets. A more
 sophisticated approach could be envisaged to avoid flooding a specific
 port queue.
 
-\subsubsection{R2P2 server}
+\subsubsection{R2P2 server} \todo{rephrase section}
 
 We use a variant of the R2P2 protocol that adds active acknowledgement
 from clients in order to reduce latency when packets are dropped. For
@@ -865,14 +864,14 @@ different threads we need some sort of atomic reference counting on
 the mbufs. The problem here is that mbufs reference counts are not
 atomic (they're plain 16 bits integer).
 
-\section{Evaluation}
+\chapter{Evaluation}
 
 We will now evaluate the performance of the system as well as the
 performance of the local store.
 
 \todo{Describe test machines}
 
-\subsection{Local store}
+\section{Local store}
 \label{sec:eval-local}
 
 We first evaluate how the local hashmap performance, especially when
@@ -882,7 +881,7 @@ network. We generate a random workload for each of the 15 concurrent
 thread and start them simultaneously. Each thread performs one million
 GET and 1 million PUT request, on a previously initialized map.
 
-\subsubsection{No collisions, balanced load}
+\subsection{No collisions, balanced load}
 
 We first establish the optimal performance we can expect from the
 hashmap by reducing the contention on the buckets, thus reducing the
@@ -902,7 +901,7 @@ stay constant.
   \captionof{table}{Distribution of request durations}
 \end{center}
 
-\subsubsection{Artificial collision, balanced load}
+\subsection{Artificial collision, balanced load}
 
 OMVCC scheme are known for performing badly under write heavy
 workloads. So we now consider the case of a skewed and write heavy
@@ -923,18 +922,18 @@ the same as described in section~\ref{sec:eval-local}.
 \end{center}
 \todo{More test setups?}
 
-\subsection{Networked store}
+\section{Networked store}
 
 \todo{Throughput / latency graph}
 \todo{Tail latency evaluation}
 
-\section{Conclusion}
+\chapter{Conclusion}
 
 We hope to have provided an easy to use and clear API to build upon
 our system. We also think that we have proved that Rust is a valid
 language to build kernel bypass networking in.
 
-\subsection{Further work}
+\section{Further work}
 
 We finish by mentioning what features are missing or could be useful
 in such a piece of software. We have provided a UDP stack on top of
