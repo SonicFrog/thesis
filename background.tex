@@ -21,22 +21,6 @@ latency dependent on the size of data
 
 \section{Rust}
 
-We make the claim that Rust~\cite{rustbook} is a better suited
-language than C for kernel bypass networked applications. The safety
-guarantees Rust brings are very well suited for this kind of
-applications, while the performance loss (if any) is negligible. As an
-additional benefit Rust allows code to be much more concise and
-abstract while drastically cutting down on the memory and concurrency
-bug tracking time. Its memory management model will also prove
-invaluable when ensuring integrity of data in between the networking
-stack and the user application.
-
-As a proof of concept we implement a key-value store on top of
-DPDK in order to prove that it is doable as well as reasonable,
-performance-wise, to use Rust in this kind of scenario.
-
-\section{Rust}
-
 Rust is a systems programming language from Mozilla Research, stemming
 from Mozilla's dissatisfaction with C++. As of today several parts of
 Firefox's rendering engine, Servo, have been rewritten in Rust after
@@ -56,6 +40,21 @@ useful when tracking down data race bugs which are notoriously hard to
 diagnose. Those kind of bugs are usually found much later in the
 development cycle and are usually quite hard to reproduce since they
 depend on a certain scheduling of the execution.
+
+We make the claim that Rust~\cite{rustbook} is a better suited
+language than C for kernel bypass networked applications. The safety
+guarantees Rust brings are very well suited for this kind of
+applications, while the performance loss (if any) is negligible. As an
+additional benefit Rust allows code to be much more concise and
+abstract while drastically cutting down on the memory and concurrency
+bug tracking time. Its memory management model will also prove
+invaluable when ensuring integrity of data in between the networking
+stack and the user application.
+
+As a proof of concept we implement a key-value store on top of
+DPDK in order to prove that it is doable as well as reasonable,
+performance-wise, to use Rust in this kind of scenario.
+
 
 \section{Memory safety}
 
