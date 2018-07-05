@@ -2,19 +2,10 @@ We now discuss how our abstract design translates into a concrete Rust
 implementation, including how it ties into the Rust standard library
 and precisely how each component interfaces with the others.
 
-\section{Design overview}
-\marios{This is more or less the graph I told you to include at the beginning of the design section. This should not be part of the implementation.}
-Let's start with an overview of the system as a whole before diving
-into the details of each individual piece.
-
-\begin{figure}[htb!]
-  \includegraphics[width=\textwidth]{../diagram/overview.pdf}
-  \caption{System overview}
-  \label{fig:design-overview}
-\end{figure}
+\section{Overview}
 
 Each packet is first received by DPDK from the NIC\@. The packets are
-then processed through the NetBricks \marios{you just introduced NetBricks here. You should do that in the background as an example of a kernel bypassed system that you will later use.} pipeline to be handed over to the
+then processed through the NetBricks pipeline to be handed over to the
 UDP stack. The UDP stack then filters and matches packets to a given
 socket. Each socket has an associated callback registered by the
 user. In our case, the socket are created by the R2P2 server which
@@ -116,14 +107,7 @@ heap.
 Let's now dive into the networking layer of the system starting with
 the lower layer, that is the interfacing with DPDK.
 
-\subsection{DPDK} \todo{rephrase section}
-\marios{First baragraph goes in the background.}
-As you probably know, DPDK is a kernel-bypass networking framework
-developed by Intel, typically for high-performance networking
-applications. We thus implement all our networking stack on top of
-DPDK. It provides drivers for Intel NICs and high-performance packet
-management and allocation, as well as lots of networking related
-libraries.
+\subsection{DPDK}
 
 DPDK being written in C, we must first find some (ideally, convenient)
 bindings allowing us to make calls into DPDK from Rust code. Another
