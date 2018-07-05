@@ -4,4 +4,6 @@ export TEXINPUTS=".."
 
 : ../listings-rust.sty |> ln -s %f |> %B.sty
 : ../master.bib |> ln -s %f |> %B.bib
-: ../master.tex | listings-rust.sty master.bib ../diagram/*.pdf ../csv/*.pdf |> !mkpdf |>
+: foreach ../*.tex |> ln -s %f |> %B.tex
+: master.tex | *.tex listings-rust.sty master.bib ../diagram/*.pdf ../csv/*.pdf |> \
+  !mkpdf |> %B.out %B.log %B.toc %B.tdo %B.pdf %B.bbl %B.aux %B.blg %B.fls %B.fdb_latexmk

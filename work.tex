@@ -1,0 +1,24 @@
+We finish by mentioning what features are missing or could be useful
+in such a piece of software. We have provided a UDP stack on top of
+NetBricks, even though in real-life scenario of networking
+applications UDP is rarely used. A TCP stack on top of NetBricks would
+therefore be a considerable improvement.
+
+One other thing that makes sense to have is an ARP handler. In our
+case we respond to a request, so we have both the source and
+destination MAC addresses at hand. But in the case where we want to
+send a packet to an arbitrary IP we need to figure out the destination
+MAC address. This is where an ARP protocol handler would come in
+handy. \todo{IPv6}
+
+With an ARP and TCP stack we would be close to a full featured
+networking framework in Rust for kernel bypass. Such a system would
+provide both the speed and the convenience of traditional socket based
+networking while also providing better networking performance and the
+safety of the Rust programming language. \todo{complete kernel bypass
+ networking framework in Rust}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "master"
+%%% End:

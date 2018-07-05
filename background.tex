@@ -1,0 +1,146 @@
+\marios{In this section we need to show you read and understood the area. This is where most of your references will come from.}
+\section{Kernel-bypassing}
+\marios{IX, Arrakis, DPDK, SPDK, NetBricks, etc. Why we do that? What's the benefit? Problems? Main applications? kv-stores. Thus, we can codesign the networking stack and the application.}
+
+NetBricks~\cite{netbricks} is a Rust framework built on top of DPDK,
+aiming to provide isolated software defined network functions while
+eliminating the need for virtualization.
+
+\section{Transport protocols for RPCs}
+
+The choice of transport protocol is critical to performance when
+designing an RPC protocol. Providing reliability is critical in
+ensuring that the application behaves as expected. However ensuring
+reliability usually involves creating copies of the data sent through
+the network to be able to retransmit it if needed. This makes the
+latency dependent on the size of data
+
+\marios{TCP, UDP, R2P2, reliable vs non reliable and implications to
+  the application behaviour. Reliability is where copies come from. We
+  need reliability though. Can we eliminate copies?}
+
+\section{Rust}
+
+We make the claim that Rust~\cite{rustbook} is a better suited
+language than C for kernel bypass networked applications. The safety
+guarantees Rust brings are very well suited for this kind of
+applications, while the performance loss (if any) is negligible. As an
+additional benefit Rust allows code to be much more concise and
+abstract while drastically cutting down on the memory and concurrency
+bug tracking time. Its memory management model will also prove
+invaluable when ensuring integrity of data in between the networking
+stack and the user application.
+
+As a proof of concept we implement a key-value store on top of
+DPDK in order to prove that it is doable as well as reasonable,
+performance-wise, to use Rust in this kind of scenario.
+
+\section{Rust}
+
+Rust is a systems programming language from Mozilla Research, stemming
+from Mozilla's dissatisfaction with C++. As of today several parts of
+Firefox's rendering engine, Servo, have been rewritten in Rust after
+the language was deemed mature enough to do so. Rust is engineered to
+provide a lot of safety guarantees, notably memory and concurrency
+safety through its type system thereby eliminating a lot of common
+problems in systems programming.
+
+The strong Rust guarantees also speed up development significantly by
+eliminating whole categories of bugs. Most importantly, Rust's type system
+eliminates use-after-free, double-free, invalid pointers, memory leaks
+and data-races. Overall, the time writing code is increasing since the
+compiler will often refuse straight out to compile code that
+potentially violates its guarantees. The counter-part to this is that
+the time spent debugging is very much reduced. This is particularly
+useful when tracking down data race bugs which are notoriously hard to
+diagnose. Those kind of bugs are usually found much later in the
+development cycle and are usually quite hard to reproduce since they
+depend on a certain scheduling of the execution.
+
+\section{Memory safety}
+
+One of the most important feature of Rust is its guarantee of memory
+safety, providing both the speed of manual memory management and the
+safety of garbage collected languages.
+
+To provide this feature, Rust introduces a new concept called
+lifetimes and makes raw pointers second class citizens. These raw
+pointers (such as that of C) can't be dereferenced since the compiler
+can't guarantee that they are valid. Pointers are hard to validate and
+verify statically mostly because of pointer arithmetic. References, on
+the other hand, are guaranteed to always point to a valid memory
+location. Like the references in C++, references in Rust do not allow
+pointer arithmetic, they can only be created from a variable, which
+ensures that the referenced memory is valid.
+
+Lifetimes are the central part of Rust's memory safety
+guarantees. They work in conjunction with references to ensure
+that references are used correctly (i.e.\ not after the value they
+refer to has been destroyed), since they allow the compiler to tell
+when a reference might outlive the value it refers to. The combination
+of lifetimes and references thus eliminate the dangling pointers
+problem entirely. Lifetimes are Rust's way of eliminating the need for
+garbage collection while not requiring users to manually manage
+memory. A lifetime gets attached to each variable created, the
+compiler then analyzes the control flow of the program to ensure that
+references or values derived from that first value (such as reference
+to a struct member) are not used after the value is destroyed.
+
+However Rust is a at the core a systems programming language so we
+need some way to bypass the safety restrictions it provides. This is
+where the \textbf{unsafe}~\cite{rustonomicon} keyword comes in. This
+keyword provides a way to tell the Rust compiler that a piece of code
+upholds the memory safety guarantees even though the former can't
+verify  statically that it does. Handling of raw pointers and call to
+foreign functions are cases where the use of \textbf{unsafe} is
+required. Indeed other languages do not provide any of Rust's
+guarantees and do not know about lifetimes. This problem also occurs
+when developing kernels~\cite{rust-os}~\cite{redox}.
+
+\section{Concurrency safety}
+
+Rust's type system also provides protection against data-races, a
+common problem when using C usually solved through atomic operations
+and locks. While it is possible to solve this kind of problems in C,
+it requires careful design and is an error-prone task. Rust therefore
+allows quicker and safer development of concurrent software. This safety
+does not come for free though. In order to guarantee that there is no
+data-race anywhere, Rust only allows either one mutable reference or
+any number of immutable reference to any given variable. By doing
+that, the compiler can ensure that the variable will only be read
+concurrently or written exclusively.
+
+Even though we speak of concurrency safety, Rust does not provide
+protection against deadlocks. This is far too complex a task for
+static analysis in a compiler since it requires costly call graph
+analysis and sometimes produces false
+positives~\cite{deadlock-detection}.
+
+However, the Rust standard library provides safe ways to mutate shared
+variables. As an example the RwLock standard library structure allows
+creating mutable reference to a value from an immutable RwLock instance.
+
+\section{Performance}
+
+Being a systems programming language, performance is critical to
+Rust. All the aforementioned guarantees are enforced statically so
+they do not incur any performance penalty. Removing pointer aliasing
+from the language also allows the compiler to do many optimizations
+that are not feasible safely in C or C++. As to the performance of the
+generated assembly code, Rust utilizes the LLVM compiler
+infrastructure and thus benefits from all the work that was done
+there. Rust also features what the Rust developers call 0-cost
+abstraction. Idiomatic Rust makes heavy use of closures, and that
+would incur, in some languages, a slight degradation of
+performance. But, in Rust, closure can be, most of the time, inlined
+thus making as if the programmer wrote the concrete code while
+allowing the interface to remain abstract.
+
+In this regard, Rust combines the best of both worlds, high-level
+readable and abstract code while also having performance close to that
+of other systems programming languages.
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "master"
+%%% End:

@@ -1,0 +1,81 @@
+\label{chap:evaluation}
+
+We will now evaluate the performance of the system as well as the
+performance of the local store.
+
+The server benchmarks are run on an Intel Xeon E5-2637 @ 3.50 Ghz
+machines with 64 GB of RAM\@. The machines also use Intel 82599ES
+10-Gigabit NICs.
+\marios{Add more details about the setup. Linux and DPDK version, Rust version etc.}
+
+\section{Local store}
+\label{sec:eval-local}
+
+We first evaluate how the local hashmap performance, especially when
+under a lot of load. We use UTF-8 string keys of 128 bytes with values
+of 64 bits to simulate only copying pointers to packets from the
+network. We generate a random workload for each of the 15 concurrent
+thread and start them simultaneously. To avoid scheduling overhead
+each thread is bound to a physical through the Linux core affinity
+API\@. Each workload is made of one million GET and 1 million PUT
+request, on a previously initialized map.
+
+\subsection{No collisions, balanced load}
+
+We first establish the optimal performance we can expect from the
+hashmap by reducing the contention on the buckets, thus reducing the
+amount of wasted work by threads trying to swap out the buckets
+unsuccessfully. To this end, we allocate four times more buckets than
+they are keys and using a uniform distribution when generating
+workload. The set of keys is pre-determined and no new keys are
+inserted throughout the test, meaning the size of each bucket will
+stay constant.
+
+\begin{center}
+  \begin{tabular}{c c} \label{table:nocol-balanced}
+    \includegraphics[width=0.5\textwidth]{../csv/balanced_no_collision_PUT.pdf}
+    &
+      \includegraphics[width=0.5\textwidth]{../csv/balanced_no_collision_GET.pdf}
+  \end{tabular}
+  \captionof{figure}{Distribution of request durations}
+\end{center}
+
+\subsection{Artificial collision, balanced load}
+
+OMVCC scheme are known for performing badly under write heavy
+workloads. So we now consider the case of a skewed and write heavy
+workload and evaluate the performance of the hashmap in this
+scenario. In order to simulate a skewed workload, we reduce the number
+of buckets in the hashmap. This will create lots of contention between
+threads for each buckets since the chance of two keys mapping to the
+same bucket is increased by a factor of 4. The test setup is, again,
+the same as described in section~\ref{sec:eval-local}.
+
+\begin{center}
+  \begin{tabular}{c c} \label{table:col-balanced}
+    \includegraphics[width=0.5\textwidth]{../csv/balanced_collision_PUT.pdf}
+    &
+      \includegraphics[width=0.5\textwidth]{../csv/balanced_collision_GET.pdf}
+  \end{tabular}
+  \captionof{figure}{Distribution of request durations with collision}
+\end{center}
+\todo{More test setups?}
+
+\section{Networked store}
+
+\begin{figure}[htb!]
+  \missingfigure{Throughput / latency graph}
+  \caption{Latency as a function of throughput}
+  \label{fig:latency-throughput}
+\end{figure}
+
+\begin{figure}[htb!]
+  \missingfigure{Latency histogram}
+  \caption{Latency distribution}
+  \label{fig:latency-distribution}
+\end{figure}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "master"
+%%% End:
