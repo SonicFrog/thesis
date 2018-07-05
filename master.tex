@@ -137,6 +137,8 @@
 
 \begin{document}
 
+\pagenumbering{gobble}
+
 \begin{titlepage}
   \newcommand{\HRule}{\rule{\linewidth}{0.5mm}} % Defines a new command for the horizontal lines, change thickness here
   \center
@@ -149,10 +151,11 @@
 
   {
     \HRule \\[0.5cm]
-    \Huge A zero copy key-value store in Rust}
+    \Huge A Zero Copy Key-Value Store in Rust}
   \HRule \\[1cm]
 
   \begin{minipage}[t]{0.4\textwidth}
+    \centering
     \large
     {\large \today}
   \end{minipage}\\[1cm]
@@ -181,18 +184,16 @@
     \end{minipage}
   \end{tabular}
 
-  \begin{center}
-    \begin{figure}[h]
-      \includegraphics[width=0.71\textwidth]{../diagram/epfl.pdf}
-    \end{figure}
-  \end{center}
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=0.71\textwidth]{../diagram/epfl.pdf}
+  \end{figure}
 
 \end{titlepage}
 
-\chapter*{Acknowledgements}
-
-\pagenumbering{gobble}
 \tableofcontents
+
+\chapter*{Acknowledgements}
 
 \pagenumbering{arabic}
 \setcounter{page}{1}
