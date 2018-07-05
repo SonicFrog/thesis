@@ -1,26 +1,34 @@
-The state of the art today for high-speed networking involves kernel
-bypassing techniques making use of software such as DPDK to reduce the
-overhead typically associated with kernel based networking. Such
-software is usually much faster than traditional kernel networking,
-mostly due to avoidance of context switches and data copies between
-kernel and user space, especially when processing lots of small
-packets which often happens in the case of key-value stores such as
-memcached. Nonetheless these systems are far from perfect. First,
-having all the  networking code and the user application inside the
-same address space means that user code can corrupt the networking
-stack very easily. Secondly, development of such applications is also
-much more cumbersome than traditional kernel based approaches, indeed
-having the user program in the same address space as the networking
-code creates the need for it to be aware of low level networking
-details that traditional applications don't need to worry about.The
-necessity to handle this kind of networking details make kernel bypass
-application much more time consuming and error-prone to develop than
-regular socket based ones. Another problem these kind of systems
-encounter is their inability to ensure safety, since contrary to
-kernel based systems the networking stack and the user application
-share a virtual address space languages like C do not provide
-sufficient safety guarantees when data is shared between multiple
-threads.
+To provide a key-value store with consistent latency independent from
+keys and values sizes we need to eliminate copies from the key-value
+store's datapath while still ensuring reliable delivery of responses
+to requests. We leverage several feature of the Rust programming
+language to achieve zero-copy reliable delivery of key-value store
+responses through the R2P2 protocol.
+\todo{performance numbers}
+
+% The state of the art today for high-speed networking involves kernel
+% bypassing techniques making use of software such as DPDK to reduce the
+% overhead typically associated with kernel based networking. Such
+% software is usually much faster than traditional kernel networking,
+% mostly due to avoidance of context switches and data copies between
+% kernel and user space, especially when processing lots of small
+% packets which often happens in the case of key-value stores such as
+% memcached. Nonetheless these systems are far from perfect. First,
+% having all the  networking code and the user application inside the
+% same address space means that user code can corrupt the networking
+% stack very easily. Secondly, development of such applications is also
+% much more cumbersome than traditional kernel based approaches, indeed
+% having the user program in the same address space as the networking
+% code creates the need for it to be aware of low level networking
+% details that traditional applications don't need to worry about.The
+% necessity to handle this kind of networking details make kernel bypass
+% application much more time consuming and error-prone to develop than
+% regular socket based ones. Another problem these kind of systems
+% encounter is their inability to ensure safety, since contrary to
+% kernel based systems the networking stack and the user application
+% share a virtual address space languages like C do not provide
+% sufficient safety guarantees when data is shared between multiple
+% threads.
 
 \marios{You need a flat abstract without subsection where you clearly
   state the problem. "We need to eliminate copies in a KV-store's
