@@ -41,8 +41,9 @@ after having been removed from the store.
 With all these constraints in mind, we go with the design shown
 in~\hyperref[fig:hashmap]{figure~\ref{fig:hashmap}}. The top level
 table is a contiguous array of atomic pointers to overflow
-buckets. And in turn each overflow bucket \marios{entry?} is a pointer to a key-value
-pair structure allowing fast, easy and zero-copy retrieval of values.
+buckets. And in turn each overflow bucket entry? is a pointer to a
+key-value pair structure allowing fast, easy and zero-copy retrieval
+of values.
 
 \begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/amap1.pdf}
@@ -145,47 +146,14 @@ reference to that data). The problem of the user program still having
 the pointer to the data thus becomes a non-problem since the compiler
 ensures that the user program does not modify it.
 
-\marios{Follow the top-down design you started with. Talk about the kv-store next, R2P2, and then UDP.}
+\section{Key-value store}
 
-\section{UDP stack} \label{sec:udp-design}
-
-The core of this project is not the low level details of interfacing
-with a NIC or even the kernel bypass. We will thus use an existing
-framework to do that for us and build our networking on top of said
-framework.
-
-It is worth mentioning the Linux kernel socket flag for zero copy.
-Though it does not provide guaranteed zero copy sending/receiving a
-port of nginx using it saw a 9\% increase in performance with minimal
-code changes. The choice was made not to use it, since it would
-eliminate one of the most interesting aspect of the project, the
-ability to have a safe userspace networking stack in the same address
-space as the user program.
-
-As for the local store, the UDP stack should uphold the zero-copy
-property of the system. That means it should interface with the
-kernel-bypassing framework and extract data from that framework while
-not copying anything.
-
-Kernel bypassing frameworks follow what is known as a run to
-completion model, the driver polls the NIC for incoming
-packets~\cite{dpdk-pmd} and hands them over to the user application in
-batches. This will influence the API design of the UDP stack and
-forbid the classic socket style API typically found in kernel
-networking stacks. Since we aim to provide a convenient and safe Rust
-API to the UDP stack we will need to come up with an alternative
-design.
-
-The run to completion model thus prompts a callback based API
-design. We thus have a callback oriented UDP stack. Since the
-framework polls the NIC for packets on its own this is
-appropriate. When the user application creates a new socket on the
-stack, it will provide a closure. Once a packet is received, its
-headers will be parsed and the UDP stack will dispatch to the
-appropriate socket registered earlier by the user application. Of
-course the callback provided by the user application should be
-reentrant since it will potentially be invoked from many threads
-concurrently.
+The key-value store is what would be considered as the user
+application. As such it will provide an example of how to use the
+system. It is the last layer of the system and should not rely on any
+details of the lower layers of the networking stack. Its role in the
+system while be to process individual R2P2 request and parse them
+using the application layer protocol.
 
 \section{R2P2 stack}
 \marios{Most of this should be move to the background section. Here you only need the request response API to interface it with the application.}
@@ -229,14 +197,46 @@ duplicating work, and thereby reducing both latency and throughput,
 it should also identify when a request has already been processed by
 the user application and avoid processing this request again.
 
-\section{Key-value store}
+\section{UDP stack} \label{sec:udp-design}
 
-The key-value store is what would be considered as the user
-application. As such it will provide an example of how to use the
-system. It is the last layer of the system and should not rely on any
-details of the lower layers of the networking stack. Its role in the
-system while be to process individual R2P2 request and parse them
-using the application layer protocol.
+The core of this project is not the low level details of interfacing
+with a NIC or even the kernel bypass. We will thus use an existing
+framework to do that for us and build our networking on top of said
+framework.
+
+It is worth mentioning the Linux kernel socket flag for zero copy.
+Though it does not provide guaranteed zero copy sending/receiving a
+port of nginx using it saw a 9\% increase in performance with minimal
+code changes. The choice was made not to use it, since it would
+eliminate one of the most interesting aspect of the project, the
+ability to have a safe userspace networking stack in the same address
+space as the user program.
+
+As for the local store, the UDP stack should uphold the zero-copy
+property of the system. That means it should interface with the
+kernel-bypassing framework and extract data from that framework while
+not copying anything.
+
+Kernel bypassing frameworks follow what is known as a run to
+completion model, the driver polls the NIC for incoming
+packets~\cite{dpdk-pmd} and hands them over to the user application in
+batches. This will influence the API design of the UDP stack and
+forbid the classic socket style API typically found in kernel
+networking stacks. Since we aim to provide a convenient and safe Rust
+API to the UDP stack we will need to come up with an alternative
+design.
+
+The run to completion model thus prompts a callback based API
+design. We thus have a callback oriented UDP stack. Since the
+framework polls the NIC for packets on its own this is
+appropriate. When the user application creates a new socket on the
+stack, it will provide a closure. Once a packet is received, its
+headers will be parsed and the UDP stack will dispatch to the
+appropriate socket registered earlier by the user application. Of
+course the callback provided by the user application should be
+reentrant since it will potentially be invoked from many threads
+concurrently.
+
 
 %%% Local Variables:
 %%% mode: latex
