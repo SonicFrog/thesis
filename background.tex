@@ -1,23 +1,66 @@
-\marios{In this section we need to show you read and understood the area. This is where most of your references will come from.}
+\marios{In this section we need to show you read and understood the
+  area. This is where most of your references will come from.}
 \section{Kernel-bypassing}
-\marios{IX, Arrakis, DPDK, SPDK, NetBricks, etc. Why we do that? What's the benefit? Problems? Main applications? kv-stores. Thus, we can codesign the networking stack and the application.}
 
-NetBricks~\cite{netbricks} is a Rust framework built on top of DPDK,
-aiming to provide isolated software defined network functions while
-eliminating the need for virtualization.
+Today's high end NICs support speeds that make traditional kernel
+networking too slow to fully exploit their capacity. The overhead of
+context switches and copying is just too much when treating millions
+of packets par second. Moreover the Linux kernel TCP stack is too
+general for specific applications, having to handle so many quirks of
+TCP makes it slower than could be achieve with a specifically designed
+networking stack. To address these problems, a technique called kernel
+bypassing was introduced allowing user space programs to speak
+directly to the NIC through the PCIe bus thereby eliminating the
+kernel overhead. These systems have networking performance orders of
+magnitude faster than kernel based ones. DPDK is perhaps the most well
+know of these kind of framework, it is developed by Intel and supports
+most high end Intel NICs.
+
+These kernel bypass systems have allowed software defined networks to
+rival performance of hardware based network middleboxes through pure
+software implementation. But they can also be useful for end host
+networking purposes. Key-value store are a big part of most of today's
+web services (Facebook, Linkedin and Amazon notably makes heavy use of
+key-value stores). Applying kernel bypass techniques to key-value
+store could bring huge performance improvements, by allowing a
+codesign of the networking stack and the user application for our
+specific purpose. MICA~\cite{mica} is an example of this, an holistic
+approach to key-value stores.
+
+However these systems also come with drawbacks, they offer no
+guarantee of safety since everything runs in the same userspace
+process it is easy to corrupt the networking stack from the user
+application. NetBricks~\cite{netbricks} is a Rust framework built on
+top of DPDK, aiming to provide isolated software defined network
+functions while eliminating the need for virtualization. It builds
+upon DPDK to provide a convenient Rust interface and provide safety
+guarantees close to that of virtualization with a much lower
+performance penalty.
 
 \section{Transport protocols for RPCs}
 
 The choice of transport protocol is critical to performance when
-designing an RPC protocol. Providing reliability is critical in
-ensuring that the application behaves as expected. However ensuring
-reliability usually involves creating copies of the data sent through
-the network to be able to retransmit it if needed. This makes the
-latency dependent on the size of data
+designing an efficient RPC protocol. Providing reliability is
+necessary when ensuring that applications behave as expected. However
+ensuring reliability usually involves creating copies of the data sent
+through the network to be able to retransmit it if needed while not
+sharing data with the user program. Traditional reliable networking
+protocol (such as the Linux kernel's TCP stack) make heavy use of
+copies to avoid this problem. However this makes the latency dependent
+on the size of data therefore degrading performance, especially when
+the payloads grow in size. The question is then can we provide a
+reliable RPC protocol while avoiding copies altogether?
 
-\marios{TCP, UDP, R2P2, reliable vs non reliable and implications to
-  the application behaviour. Reliability is where copies come from. We
-  need reliability though. Can we eliminate copies?}
+Using TCP would make such a networking stack a little bit too complex,
+the constraint of avoiding data copies make delivering the TCP byte
+stream a complex task. UDP on the other hand only provides a message
+oriented delivery therefore being much simpler to implement. But it
+does not provide any kind of reliable delivery of packets, so there is
+need for need some other transport protocol on top of UDP to provide
+reliable delivery of packets. R2P2, the Request Response Pair
+Protocol, is a highly scalable RPC protocol, that provides
+load-balanced delivery of multi-packet requests and responses on top
+of UDP.
 
 \section{Rust}
 
