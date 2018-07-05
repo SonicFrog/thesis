@@ -4,9 +4,10 @@ We will now evaluate the performance of the system as well as the
 performance of the local store.
 
 The server benchmarks are run on an Intel Xeon E5-2637 @ 3.50 Ghz
-machines with 64 GB of RAM\@. The machines also use Intel 82599ES
-10-Gigabit NICs.
-\marios{Add more details about the setup. Linux and DPDK version, Rust version etc.}
+machine with 64 GB of RAM, running Ubuntu. The machines have Intel
+82599ES 10-Gigabit NICs. Since we make heavy use of experimental Rust
+APIs, we use the Rust nightly 1.28. NetBricks also requires Rust
+nightly and is built on top of DPDK 17.05.
 
 \section{Local store}
 \label{sec:eval-local}
