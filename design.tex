@@ -25,7 +25,15 @@ networking stack is therefore also a design goal. That means the API
 should follow idiomatic Rust interface design principles and leverage
 all the language features necessary to make it re-usable and generic.
 
-\marios{You need a layered diagram here starting from hardware all the way up to the application that lists the software componenets that you'll talk about later. Once you have that it's way cleaner to understand what are the following sections.}
+The design of the system as a whole, as well as how each component
+interface with the others is shown in
+figure~\ref{fig:design-overview}.
+
+\begin{figure}[htb!]
+  \includegraphics{../diagram/overview.pdf}
+  \caption{System design overview}
+  \label{fig:design-overview}
+\end{figure}
 
 \section{Local store} \label{sec:local-store-design}
 
@@ -118,8 +126,9 @@ result in a lot of wasted work as each thread will need to build
 the new version of the bucket multiple times. The most expensive
 operation for an insert is actually the atomic compare and swap. Since
 a typical workload on key-value stores implies a majority of reads
-compared to writes (the Facebook USR load is only 0.2\% writes)\marios{cite http://www.ece.eng.wayne.edu/~sjiang/pubs/papers/atikoglu12-memcached.pdf}, this
-won't be a problem in our target use case.
+compared to writes (the Facebook USR load is only 0.2\%
+writes~\cite{memcached}), this won't be a problem in our target use
+case.
 
 % rephrase this section
 The case shown in~\ref{fig:omvcc} actually showcases how we handle
@@ -156,18 +165,6 @@ system while be to process individual R2P2 request and parse them
 using the application layer protocol.
 
 \section{R2P2 stack}
-\marios{Most of this should be move to the background section. Here you only need the request response API to interface it with the application.}
-
-UDP does not provide any kind of reliable delivery of packets, so we
-need some other transport protocol on top of UDP to provide reliable
-delivery of packets. R2P2, the Request Response Pair Protocol, is a
-highly scalable RPC protocol. We therefore chose to use a slightly
-modified version of R2P2. The published version of R2P2 does not
-provide reliable delivery, only load-balancing and request format. We
-therefore add explicit acknowledgement of responses from
-clients. Since client code and a benchmarking suite  already exist for
-R2P2, the choice was made to use it as an RPC protocol for our key
-value store.
 
 As stated in the design goals the R2P2 stack should provide an
 easy-to-use, reliable and zero-copy interface to user
@@ -187,8 +184,8 @@ only care about handling complete requests the R2P2 stack will store
 packets and group by them by request and finally invoke the user
 provided callback once the whole request has been received and
 parsed. This callback should construct the response from the
-request. The R2P2 then handles transmitting the response to the client
-using the UDP stack.
+request. The R2P2 stack then handles transmitting the response to the
+client using the UDP stack.
 
 The R2P2 layer is also responsible for the reliable delivery of
 responses. It should then hold on to responses produced by the user
