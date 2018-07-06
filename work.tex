@@ -4,13 +4,18 @@ NetBricks, even though in real-life scenario of networking
 applications UDP is rarely used. A TCP stack on top of NetBricks would
 therefore be a considerable improvement.
 
-One other thing that makes sense to have is an ARP handler. In our
-case we respond to a request, so we have both the source and
-destination MAC addresses at hand. But in the case where we want to
+But in the case where we want to
 send a packet to an arbitrary IP we need to figure out the destination
-MAC address. This is where an ARP protocol handler would come in
-handy. A networking stack supporting IPv6 would also be a good
+MAC address. A networking stack supporting IPv6 would also be a good
 improvement considering the need to migrate from IPv4.
+
+As it stands destination MAC addresses have to be provided by the user
+application when sending packets. This is less than ideal since it
+means the user application still has to handle low level networking
+details. In our case we respond to a request, so we have both the
+source and destination MAC addresses at hand, but in some other
+potential applications (such as a sending packets to an arbitrary
+destination that has not sent a request) this could be a problem.
 
 With an ARP and TCP stack we would be close to a full featured
 networking framework in Rust for kernel bypass. Such a system would

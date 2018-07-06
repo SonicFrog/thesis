@@ -75,7 +75,26 @@ in~\hyperref[fig:value-sharing]{figure~\ref{fig:value-sharing}}.
   \label{fig:value-sharing}
 \end{figure}
 
-\marios{Pick 1,2 cases such as an update and a delete and walk the reader through it. It will be way cleaner this way. Make the example names bold so that someone will know and read for a key update for example.}
+% \marios{Pick 1,2 cases such as an update and a delete and walk the reader through it. It will be way cleaner this way. Make the example names bold so that someone will know and read for a key update for example.}
+
+Let's walk through how a \textbf{concurrent insert} will work with a
+concurrent retrieval of the same key. First both threads will attempt
+to fetch the current value of the bucket, bringing its reference count
+to 3. Once that is done the GET thread will extract the proper key
+from the bucket and send it. In the meantime the PUT thread will copy
+the content of the same bucket, append or replace the correct key
+inside the bucket then attempt to swap atomically the bucket with the
+value currently stored (the one the GET thread is using). For the sake
+of simplicity, let's say no one has modified the bucket in the
+meantime, the swap therefore succeeds. The PUT thread then drops its
+reference to the old bucket, but the GET thread still has a reference
+to it so it stays allocated until the GET thread is done with its
+retrieval. Every subsequent GET request after this point will then
+access the new version of the bucket created by the GET thread.
+
+A \textbf{key removal} follows the same process as an insertion except
+that instead of adding a key to the bucket we remove it before
+swapping it back with the old version.
 
 We should also, according to the constraints support lock-free and
 fast insertion or replacement of values while not interfering with
@@ -96,29 +115,6 @@ in~\ref{fig:omvcc-insert}.
   \label{fig:omvcc-insert}
 \end{figure}
 
-Once the local work is done, the inserting thread attempts to swap the
-value it constructed with the old one. Here, a compare and swap is
-necessary, since it is possible than another thread was modifying the
-same bucket concurrently and has already swapped the old value with
-the one it constructed. To avoid losing updates in the store it is
-therefore necessary to reconstruct the thread local value if the
-compare and swap was unsuccessful. If the swap was successful on the
-other hand, the thread that successfully swap the bucket must now
-decrease the reference count of the old bucket. Here, again, the
-atomic reference counts make sense since the old bucket could be in
-use by any number of other threads performing retrievals in this
-bucket. If we consider all the properties that the resulting hashmap
-has, we realize that it uses an optimistic multi-version concurrency
-control scheme. Optimistic, since each thread works on its own before
-attempting to synchronize with other threads, and multi-version since
-each bucket can have multiple versions in use at any given point.
-
-\begin{figure}
-  \includegraphics[width=\textwidth]{../diagram/amap3.pdf}
-  \caption{Bucket swapping}
-  \label{fig:omvcc-swap}
-\end{figure}
-
 This lock-free design allows a fast, concurrent and zero-copy
 insertion of values inside the hashmap. However in the case where the
 workload is write-heavy, an optimistic concurrency control scheme will
@@ -130,17 +126,17 @@ compared to writes (the Facebook USR load is only 0.2\%
 writes~\cite{memcached}), this won't be a problem in our target use
 case.
 
-% rephrase this section
-The case shown in~\ref{fig:omvcc} actually showcases how we handle
-data shared between the user program and the networking stack. Since
-we aim to provide a reliable networking protocol, at some point the
-data will be passed to the networking stack for transmission. At this
-point the networking stack will hold on to the data until it is
-acknowledged by the other end. Our design even allows values to be
-removed from the hashmap while still being held in the networking
-stack for retransmission, see~\ref{fig:cc2}. The data is then only
-referenced in the networking stack, and consequently freed once it is
-successfully acknowledged.
+If we consider all the properties that the resulting hashmap
+has, we realize that it uses an optimistic multi-version concurrency
+control scheme. Optimistic, since each thread works on its own before
+attempting to synchronize with other threads, and multi-version since
+each bucket can have multiple versions in use at any given point.
+
+\begin{figure}
+  \includegraphics[width=\textwidth]{../diagram/amap3.pdf}
+  \caption{Bucket swapping}
+  \label{fig:omvcc-swap}
+\end{figure}
 
 \begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/cc2.pdf}
@@ -148,12 +144,11 @@ successfully acknowledged.
   \label{fig:cc2}
 \end{figure}
 
-On a related note, Rust's concurrency guarantees ensure that data held
-in the networking stack can't be modified (since the networking stack
-holds an immutable reference to it, there can't be any mutable
-reference to that data). The problem of the user program still having
-the pointer to the data thus becomes a non-problem since the compiler
-ensures that the user program does not modify it.
+On a related note, Rust's concurrency guarantees ensure that sharing
+key-value pairs extracted from the hashmap amongst threads isn't a
+problem. Indeed since each thread will have an immutable reference to
+the data, the compiler will enforce that these threads don't modify it
+at compile time.
 
 \section{Key-value store}
 
@@ -177,7 +172,7 @@ The R2P2 stack will be implemented on top of the UDP stack described in
 section~\ref{sec:udp-design}. The API design of the R2P2 stack is
 therefore constrained by the design of the UDP stack. We thus make use
 of callback in the R2P2 stack. The R2P2 stack itself interfaces with
-the UDP stack by registered a callback invoked on each udp
+the UDP stack by registered a callback invoked on each UDP
 packet. Since R2P2 provides multi-packet requests, the R2P2 should
 handle reconstruction of requests. Since the user application will
 only care about handling complete requests the R2P2 stack will store

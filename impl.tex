@@ -23,7 +23,7 @@ OptiMap is the name for the highly concurrent hashmap, described in
 section~\ref{sec:local-store-design}, and we now will see how exactly
 the design translates into a concrete Rust implementation.
 
-\subsection{AtomicBox}
+\subsection{AtomicBox} \label{sec:atomicbox}
 
 As stated in section~\ref{sec:local-store-design}, we need some way to
 atomically swap values while also atomically reference counting them.
@@ -68,7 +68,7 @@ therefore introducing a risk of double-free or invalid memory
 accesses.
 
 \begin{figure}[htb!]
-  \label{code:atomicbox-interface}
+  \label{fig:aboxinterface}
   \lstinputlisting{../code/abox_take.rs}
   \caption{AtomicBox public interface}
 \end{figure}
@@ -78,7 +78,7 @@ multi-version concurrency control scheme. Indeed, the AtomicBox allows
 users to extract an Arc to the value referenced by the AtomicPtr it
 contains. We can thus extract values from the AtomicBox and keep them
 even when they are removed from the AtomicPtr as shown in
-figure~\ref{code:atomicbox-interface}.
+figure~\ref{fig:aboxinterface}.
 
 The public interface provided by AtomicBox aims to be simple, fast and
 safe, hiding the unsafe details of the actual operation. We therefore
@@ -100,15 +100,50 @@ respect to size will be coming directly from DPDK allocating memory
 buffers from Linux's \textbf{hugepages} and thus won't affect the
 heap.
 
-\todo{Explain how the hashmap is built on top of AtomicBox}
+\subsection{HashMap}
+
+We now use the AtomicBox abstraction described in
+section~\ref{sec:atomicbox} to build the concurrent hashmap.
+
+We will use the AtomicBox abstraction to store the buckets of the
+hashmap. So the top level table of the hashmap is a contiguous array
+of AtomicBoxes that stores arrays of key-value entries.
+
+\begin{figure}[htb!]
+  \lstinputlisting{../code/buckets.rs}
+  \label{fig:atomicbucket}
+  \captionof{figure}{AtomicBucket}
+\end{figure}
+
+The \textbf{BucketEntry} structure is then a plain structure that just
+contains the key and the value, also shown in
+figure~\ref{fig:atomicbucket}. It also provides convenient access to
+both the key and the value to simplify handling the two as one
+coherent entity.
+
+OptiMap also handles values escaping from its scope. We therefore
+provide an abstraction named \textbf{ValueHolder} that allows values to
+outlive the hashmap, as shown in figure~\ref{fig:valueholder}. This
+ValueHolder structure also allows convenient access to the value it
+contains through Rust primitives.
+
+\begin{figure}[htb!]
+  \lstinputlisting{../code/vholder.rs}
+  \captionof{figure}{ValueHolder construct}
+  \label{fig:valueholder}
+\end{figure}
+
+ValueHolder makes use of the Rust trait \textbf{Deref}. The Deref
+trait is used in Rust to make values behave as if they were
+references. So from the user's perspective the ValueHolder actually is
+just a reference to the value that can be used independently from the
+OptiMap.
 
 \subsection{Key value store}
 
 The key-value store uses a simplified version of the Redis
 protocol. It only supports SET and GET requests, since the test
 workload has no other type of requests.
-
-\todo{Describe how we build keys and values from the raw Packets}
 
 It then handles construction of the actual value that will be stored
 in the hashmap. The requirements for the actual hashmap value and key
@@ -154,18 +189,17 @@ by one.
 
 \begin{figure}[htb!]
   \lstinputlisting{../code/udp-sock.rs}
-  \label{code:socket-registration}
+  \label{fig:bind-send}
   \caption{UDP stack public interface}
 \end{figure}
 
-The bind method shown in figure~\ref{code:socket-registration} allows
-users to bind socket on a given UdpStack. The user provides the IP
-address to listen on as well as the UDP port. In order to receive
-incoming packets the user also provides a closure that will be called
-every time a packet is read from the NIC by the UdpStack. The stack
-will actually transfer ownership of the packets received to the
-callback, thereby permitting the zero copy networking stack we are
-aiming for.
+The bind method shown in figure~\ref{fig:bind-send} allows users to
+bind socket on a given UdpStack. The user provides the IP address to
+listen on as well as the UDP port. In order to receive incoming
+packets the user also provides a closure that will be called every
+time a packet is read from the NIC by the UdpStack. The stack will
+actually transfer ownership of the packets received to the callback,
+thereby permitting the zero copy networking stack we are aiming for.
 
 The send method on the other hand does not need to transfer ownership
 of the packets to the UDP stack, because it does not need to keep the

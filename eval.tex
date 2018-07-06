@@ -41,6 +41,13 @@ stay constant.
   \captionof{figure}{Distribution of request durations}
 \end{center}
 
+The orange line is the median value of request durations. The median
+value for GET request time is 520ns and it is 700ns for PUT request in
+the case where we minimize collisions. Considering that there is a
+non-compressible 4.5 microseconds time to perform PCI transactions
+when sending packets the key-value store won't be the major latency
+inducing part of the system in the case where collisions are low.
+
 \subsection{Artificial collision, balanced load}
 
 OMVCC scheme are known for performing badly under write heavy
@@ -60,21 +67,12 @@ the same as described in section~\ref{sec:eval-local}.
   \end{tabular}
   \captionof{figure}{Distribution of request durations with collision}
 \end{center}
-\todo{More test setups?}
 
-\section{Networked store}
-
-\begin{figure}[htb!]
-  \missingfigure{Throughput / latency graph}
-  \caption{Latency as a function of throughput}
-  \label{fig:latency-throughput}
-\end{figure}
-
-\begin{figure}[htb!]
-  \missingfigure{Latency histogram}
-  \caption{Latency distribution}
-  \label{fig:latency-distribution}
-\end{figure}
+The goal of this test setup is to evaluate how the key-value store
+will perform in adverse conditions. As we can see the median has
+increased by around 200ns on PUT requests, which is to be expected
+since there will be more attempts where work will need to be done more
+than once because of the contention on buckets.
 
 %%% Local Variables:
 %%% mode: latex
