@@ -4,11 +4,6 @@ NetBricks, even though in real-life scenario of networking
 applications UDP is rarely used. A TCP stack on top of NetBricks would
 therefore be a considerable improvement.
 
-But in the case where we want to
-send a packet to an arbitrary IP we need to figure out the destination
-MAC address. A networking stack supporting IPv6 would also be a good
-improvement considering the need to migrate from IPv4.
-
 As it stands destination MAC addresses have to be provided by the user
 application when sending packets. This is less than ideal since it
 means the user application still has to handle low level networking
@@ -23,8 +18,8 @@ provide both the speed and the convenience of traditional socket based
 networking while also providing better networking performance and the
 safety of the Rust programming language. A complete networking
 framework for kernel bypassing in Rust, would provide an easy way of
-to create quick and safe of high throughput and low latency
-networking applications in Rust.
+to create safe, high throughput and low latency networking
+applications in Rust.
 
 %%% Local Variables:
 %%% mode: latex

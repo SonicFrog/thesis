@@ -1,23 +1,65 @@
 \chapter{Introduction}
 
-Applications such as websearch, e-commerce, and social networking have strict tail-latency service level objectives (SLOs) to maintain users' attention~\cite{url:attention}.
-While modern networking infrastructure allows for network transfers at 40 and 100Gbps, and round-trip latencies in a handful of microseconds~\cite{XXX}, existing operating systems and application software can prevent applications from achieving close to hardware performance~\cite{ix}.
-Thus, both academia and industry have focused on reducing the overheads coming from deep software stacks and inefficient system implementation, so that applications can perform as close to hardware as possible.
+Applications such as websearch, e-commerce, and social networking have
+strict tail-latency service level objectives (SLOs) to maintain users'
+attention~\cite{url:attention}.
+While modern networking infrastructure allows for network transfers at
+40 and 100Gbps, and round-trip latencies in a handful of
+microseconds~\cite{XXX}, existing operating systems and application
+software can prevent applications from achieving close to hardware
+performance~\cite{ix}.
+Thus, both academia and industry have focused on reducing the
+overheads coming from deep software stacks and inefficient system
+implementation, so that applications can perform as close to hardware
+as possible.
 
-Dataplane operating systems are such an approach that aims to optimise throughput and latency for certain types of applications, such as key-value stores.
-Dataplane operating trade-off generality for performance, since they can afford to simplify their networking stack, given that they serve one specific application.
-Systems such as IX~\cite{ix} and Arrakis~\cite{arrakis} showed that re-using design principles well-known from middleboxes, can significantly improve the application performance.
+Dataplane operating systems are such an approach that aims to optimize
+throughput and latency for certain types of applications, such as
+key-value stores.
+Dataplane operating trade-off generality for performance, since they
+can afford to simplify their networking stack, given that they serve
+one specific application.
+Systems such as IX~\cite{ix} and Arrakis~\cite{arrakis} showed that
+re-using design principles well-known from middleboxes, can
+significantly improve the application performance.
 
-However, the above systems tried to maintain compatibility with existing applications and only allowed minimal changes to the POSIX API, while they maintained distinct layers between the application and the networking stack.
-This design decision, though, prevented the aggressive optimisations that would be possible in the case of co-designing the application with the networking stack.
-For example, the way TCP is exposed to applications through POSIX sockets, inherently implies copies between the application and the OS.
+However, the above systems tried to maintain compatibility with
+existing applications and only allowed minimal changes to the POSIX
+API, while they maintained distinct layers between the application and
+the networking stack.
+This design decision, though, prevented the aggressive optimisations
+that would be possible in the case of co-designing the application
+with the networking stack.
+For example, the way TCP is exposed to applications through POSIX
+sockets, inherently implies copies between the application and the
+OS.
 
-In this thesis, we attempt to co-design and implement a key-value store with the networking stack that depends on a reliable transport, while at the same time completely eliminating copies both on the receive and transmit path.
-To do so, we leverage Rust, a new systems programming language, that guarantees memory safety through an explicit memory onwernship model.
-By using Rust we can reason at compile time about the memory ownership that can change between the application and the networking stack.
+In this thesis, we attempt to co-design and implement a key-value
+store with the networking stack that depends on a reliable transport,
+while at the same time completely eliminating copies both on the
+receive and transmit path.
+To do so, we leverage Rust, a new systems programming language, that
+guarantees memory safety through an explicit memory onwernship model.
+By using Rust we can reason at compile time about the memory ownership
+that can change between the application and the networking stack.
 
-We implemented a key-value store that uses the Redis API on top of Intel's DPDK and serves requests over R2P2, a reliable transport protocol specifically designed for RPCs.
-Our key-value store depends on a lock-free store that eliminates data copies between the application and the networking stack.
+We implemented a key-value store that uses the Redis API on top of
+Intel's DPDK and serves requests over R2P2, a reliable transport
+protocol specifically designed for RPCs.
+Our key-value store depends on a lock-free store that eliminates data
+copies between the application and the networking stack.
 The evaluation shows that....\marios{FIXME!}
 
-The rest of this document is organised as follows:\marios{FIXME!}
+The rest of this document is organised as follows: % \marios{FIXME!}
+\begin{itemize}
+\item We will first explore a little background on the topic in
+  chapter~\ref{chap:background}
+\item We will then explain how we intend to design the system in
+  chapter~\ref{chap:design}
+\item After that we will see how the abstract design translates into a
+  concrete Rust implementation in chapter~\ref{chap:implementation}
+\item Finally we will evaluate how our system performs compared to
+  other similar systems in chapter~\ref{chap:evaluation}.
+\item And to conclude we will mention what further work could be done
+  to improve on the current system in chapter~\ref{chap:work}
+\end{itemize}

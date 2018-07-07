@@ -199,26 +199,29 @@
 
 \tableofcontents
 
-\include{intro}
-\include{background}
+\include*{intro}
 
-\chapter{Design}
+\chapter{Background} \label{chap:background}
+
+\include*{background}
+
+\chapter{Design} \label{chap:design}
 
 \include*{design}
 
-\chapter{Implementation}
+\chapter{Implementation} \label{chap:implementation}
 
 \include*{impl}
 
-\chapter{Evaluation}
+\chapter{Evaluation} \label{chap:evaluation}
 
 \include*{eval}
 
-\chapter{Further work}
+\chapter{Further work} \label{chap:work}
 
 \include*{work}
 
-\chapter{Conclusion}
+\chapter{Conclusion} \label{chap:end}
 
 We hope to have provided an easy to use and clear API to build upon
 our system. We also think that we have proved that Rust is a valid

@@ -74,6 +74,20 @@ increased by around 200ns on PUT requests, which is to be expected
 since there will be more attempts where work will need to be done more
 than once because of the contention on buckets.
 
+We also notice a slight increase in GET times. This is most likely due
+to the atomic instructions used to fetch buckets that can cause
+stalling due to the necessity of synchronizing memory accesses across
+cores.
+
+\section{Networked store}
+
+Though we hoped to have the performance evaluation of the system as a
+whole ready, a few unforeseen problems surfaced at the last
+minute. These problems (related to low-level DPDK implementation
+details) prevented us from providing a comprehensive performance
+evaluation of the whole system. Nonetheless we will try to have one
+ready for the defense.
+
 %%% Local Variables:
 %%% mode: latex
 %%% TeX-master: "master"

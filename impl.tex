@@ -139,7 +139,7 @@ references. So from the user's perspective the ValueHolder actually is
 just a reference to the value that can be used independently from the
 OptiMap.
 
-\subsection{Key value store}
+\section{Key value store}
 
 The key-value store uses a simplified version of the Redis
 protocol. It only supports SET and GET requests, since the test
@@ -156,7 +156,7 @@ different threads we need some sort of atomic reference counting on
 the mbufs. The problem here is that mbufs reference counts are not
 atomic (they're plain 16 bits integer).
 
-\subsection{R2P2 server}
+\section{R2P2 server}
 
 We use a slightly modified version of the R2P2 protocol that adds
 active acknowledgement from clients in order to reduce latency when
@@ -177,7 +177,7 @@ acknowledgement. The response returned by the user callback is stored
 in the R2P2 server while waiting for the acknowledgement and
 retransmitted if need be.
 
-\subsection{UDP stack}
+\section{UDP stack}
 
 The UDP stack ties in to NetBricks by registering a pipeline on all
 available cores and using each pipeline to dispatch packets to the
@@ -210,7 +210,7 @@ To avoid flooding the same TX ring, send() uses a simple round-robin
 approach to select the output queue.
 
 
-\subsection{NetBricks}
+\section{NetBricks}
 
 \begin{figure}[htb!]
 \begin{lstlisting}
