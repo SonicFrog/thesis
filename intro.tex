@@ -1,44 +1,23 @@
-To provide a key-value store with consistent latency independent from
-keys and values sizes we need to eliminate copies from the key-value
-store's datapath while still ensuring reliable delivery of responses
-to requests. We leverage several feature of the Rust programming
-language to achieve zero-copy reliable delivery of key-value store
-responses through the R2P2 protocol.
-\todo{performance numbers}
+\chapter{Introduction}
 
-% The state of the art today for high-speed networking involves kernel
-% bypassing techniques making use of software such as DPDK to reduce the
-% overhead typically associated with kernel based networking. Such
-% software is usually much faster than traditional kernel networking,
-% mostly due to avoidance of context switches and data copies between
-% kernel and user space, especially when processing lots of small
-% packets which often happens in the case of key-value stores such as
-% memcached. Nonetheless these systems are far from perfect. First,
-% having all the  networking code and the user application inside the
-% same address space means that user code can corrupt the networking
-% stack very easily. Secondly, development of such applications is also
-% much more cumbersome than traditional kernel based approaches, indeed
-% having the user program in the same address space as the networking
-% code creates the need for it to be aware of low level networking
-% details that traditional applications don't need to worry about.The
-% necessity to handle this kind of networking details make kernel bypass
-% application much more time consuming and error-prone to develop than
-% regular socket based ones. Another problem these kind of systems
-% encounter is their inability to ensure safety, since contrary to
-% kernel based systems the networking stack and the user application
-% share a virtual address space languages like C do not provide
-% sufficient safety guarantees when data is shared between multiple
-% threads.
+Applications such as websearch, e-commerce, and social networking have strict tail-latency service level objectives (SLOs) to maintain users' attention~\cite{url:attention}.
+While modern networking infrastructure allows for network transfers at 40 and 100Gbps, and round-trip latencies in a handful of microseconds~\cite{XXX}, existing operating systems and application software can prevent applications from achieving close to hardware performance~\cite{ix}.
+Thus, both academia and industry have focused on reducing the overheads coming from deep software stacks and inefficient system implementation, so that applications can perform as close to hardware as possible.
 
-\marios{You need a flat abstract without subsection where you clearly
-  state the problem. "We need to eliminate copies in a KV-store's
-  datapath. Thus we use language features to reason about data
-  onwership." You mention that we use Rust for that without any
-  details. You mention that the solution is for reliable transport
-  protocols and we use R2P2 without getting into details. And then you
-  state some basic performance numbers.}
+Dataplane operating systems are such an approach that aims to optimise throughput and latency for certain types of applications, such as key-value stores.
+Dataplane operating trade-off generality for performance, since they can afford to simplify their networking stack, given that they serve one specific application.
+Systems such as IX~\cite{ix} and Arrakis~\cite{arrakis} showed that re-using design principles well-known from middleboxes, can significantly improve the application performance.
 
-%%% Local Variables:
-%%% mode: latex
-%%% TeX-master: "master"
-%%% End:
+However, the above systems tried to maintain compatibility with existing applications and only allowed minimal changes to the POSIX API, while they maintained distinct layers between the application and the networking stack.
+This design decision, though, prevented the aggressive optimisations that would be possible in the case of co-designing the application with the networking stack.
+For example, the way TCP is exposed to applications through POSIX sockets, inherently implies copies between the application and the OS.
+
+In this thesis, we attempt to co-design and implement a key-value store with the networking stack that depends on a reliable transport, while at the same time completely eliminating copies both on the receive and transmit path.
+To do so, we leverage Rust, a new systems programming language, that guarantees memory safety through an explicit memory onwernship model.
+By using Rust we can reason at compile time about the memory ownership that can change between the application and the networking stack.
+
+We implemented a key-value store that uses the Redis API on top of Intel's DPDK and serves requests over R2P2, a reliable transport protocol specifically designed for RPCs.
+Our key-value store depends on a lock-free store that eliminates data copies between the application and the networking stack.
+The evaluation shows that....\marios{FIXME!}
+
+The rest of this document is organised as follows:\marios{FIXME!}
