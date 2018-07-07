@@ -37,10 +37,7 @@ debugging time is still very much reduced since we know for sure that
 memory corruption problems are located inside \textbf{unsafe} code
 blocks.
 
-\begin{figure}[htb!]
-  \lstinputlisting{../code/abox.rs}
-  \caption{The AtomicBox structure}
-\end{figure}
+\lstinputlisting[caption={The AtomicBox structure}]{../code/abox.rs}
 
 This leads us to the \textbf{AtomicBox} abstraction, a safe wrapper
 around \textbf{AtomicPtr}, that we will use to build our OMVCC
@@ -67,11 +64,7 @@ transformed back into an Arc, although this requires using
 therefore introducing a risk of double-free or invalid memory
 accesses.
 
-\begin{figure}[htb!]
-  \label{fig:aboxinterface}
-  \lstinputlisting{../code/abox_take.rs}
-  \caption{AtomicBox public interface}
-\end{figure}
+\lstinputlisting[caption={AtomicBox public interface}]{../code/abox_take.rs}
 
 The AtomicBox abstraction allows us to implement the optimistic
 multi-version concurrency control scheme. Indeed, the AtomicBox allows
@@ -109,11 +102,7 @@ We will use the AtomicBox abstraction to store the buckets of the
 hashmap. So the top level table of the hashmap is a contiguous array
 of AtomicBoxes that stores arrays of key-value entries.
 
-\begin{figure}[htb!]
-  \lstinputlisting{../code/buckets.rs}
-  \label{fig:atomicbucket}
-  \captionof{figure}{AtomicBucket}
-\end{figure}
+\lstinputlisting[caption={AtomicBucket}, label={fig:atomicbucket}]{../code/buckets.rs}
 
 The \textbf{BucketEntry} structure is then a plain structure that just
 contains the key and the value, also shown in
@@ -127,11 +116,7 @@ outlive the hashmap, as shown in figure~\ref{fig:valueholder}. This
 ValueHolder structure also allows convenient access to the value it
 contains through Rust primitives.
 
-\begin{figure}[htb!]
-  \lstinputlisting{../code/vholder.rs}
-  \captionof{figure}{ValueHolder construct}
-  \label{fig:valueholder}
-\end{figure}
+\lstinputlisting[caption={ValueHolder construct}, label={fig:valueholder}]{../code/vholder.rs}
 
 ValueHolder makes use of the Rust trait \textbf{Deref}. The Deref
 trait is used in Rust to make values behave as if they were
@@ -187,11 +172,7 @@ packets dropping invalid ones and routing the others to the correct
 socket. The corresponding callback is then called on the packets one
 by one.
 
-\begin{figure}[htb!]
-  \lstinputlisting{../code/udp-sock.rs}
-  \label{fig:bind-send}
-  \caption{UDP stack public interface}
-\end{figure}
+\lstinputlisting[label={fig:bind-send}, caption={UDP stack public interface}]{../code/udp-sock.rs}
 
 The bind method shown in figure~\ref{fig:bind-send} allows users to
 bind socket on a given UdpStack. The user provides the IP address to
@@ -250,11 +231,7 @@ send packets through NetBricks and NetBricks does not know how to
 handle CrossPackets. It is therefore necessary to be able to convert a
 CrossPacket to a Packet as well as the reverse.
 
-\begin{figure}[htb!]
-  \lstinputlisting{../code/cp.rs}
-  \caption{CrossPacket abstraction}
-  \label{code:crosspacket}
-\end{figure}
+\lstinputlisting[caption={CrossPacket abstraction},label={code:crosspacket}]{../code/cp.rs}
 
 The CrossPacket abstraction is the way we work within the limits of
 the Rust type system. NetBricks' \textbf{Packet}s are, by default,
