@@ -127,19 +127,20 @@ OptiMap.
 \section{Key value store}
 
 The key-value store uses a simplified version of the Redis
-protocol. It only supports SET and GET requests, since the test
-workload has no other type of requests.
+protocol. For the sake of simplicity it only supports SET and GET
+requests. Its two most important task will be to interface with the
+local store in a zero copy manner, which proved to be a non-trivial
+task, and to handle incoming Redis request.
 
-It then handles construction of the actual value that will be stored
-in the hashmap. The requirements for the actual hashmap value and key
-datastructures are mostly to play nice with the Rust memory management
-model and DPDK mbufs. Indeed since we use segmented packets, we need
-the headers to be freed once the request has been satisfied but the
-payload itself must be kept as long as either the hashmap or the
-networking hold it. As the payload can be sent concurrently from
-different threads we need some sort of atomic reference counting on
-the mbufs. The problem here is that mbufs reference counts are not
-atomic (they're plain 16 bits integer).
+The requirements for the actual hashmap value and key datastructures
+are mostly to play nice with the Rust memory management model and
+manage the lifetime of DPDK mbufs. Indeed since we use segmented
+packets, we need the headers to be freed once the request has been
+satisfied but the payload itself must be kept as long as either the
+hashmap or the networking hold it. As the payload can be sent
+concurrently from different threads we need some sort of atomic
+reference counting on the mbufs, fortunately DPDK already provides
+such a thing.
 
 \section{R2P2 server}
 
@@ -152,15 +153,17 @@ received.
 
 The R2P2 stack is built on top of the aforementioned UDP stack. The
 R2P2 server registers a packet callback and then dispatches the packet
-to the correct request after parsing the headers. Again the R2P2
-server uses callbacks registered by the user application to handle
-requests. These callbacks return a R2P2Response structure that is then
-sent by the R2P2 server through the UDP stack.
+to the correct request after parsing the headers. Once a request has
+been received entirely, the R2P2 server uses callbacks registered by
+the user application to handle requests. This callback returns a
+R2P2Response structure that is then sent by the R2P2 server through
+the UDP stack.
 
 The R2P2 server handles reliable delivery through client
 acknowledgement. The response returned by the user callback is stored
 in the R2P2 server while waiting for the acknowledgement and
-retransmitted if need be.
+retransmitted if need be. This avoids having to duplicate work in case
+some packets get lost when transmitting the response.
 
 \section{UDP stack}
 
@@ -233,21 +236,21 @@ CrossPacket to a Packet as well as the reverse.
 
 \lstinputlisting[caption={CrossPacket abstraction},label={code:crosspacket}]{../code/cp.rs}
 
-The CrossPacket abstraction is the way we work within the limits of
-the Rust type system. NetBricks' \textbf{Packet}s are, by default,
-mutable meaning the Rust compiler will not allow them to cross thread
-boundaries in order to prevent data races. However since the
-pointer to the mbuf is immutable this poses a problem when sending the
-packet. Indeed DPDK stores headers in the same buffer as the payload,
-meaning we can't easily send the same payload concurrently to two
-different destination. The way to solve this is make use of DPDK's
-mbuf chaining, the first mbuf in the chain being local to the current
-thread (therefore being mutable) and the second one being the
-immutable payload shared between threads. This is the second notable
-modification we make to our NetBricks fork, the ability to chain mbufs
-to maintain the immutability of the packets we received from the
-network while also having the possibility to send them concurrently to
-different destinations.
+The CrossPacket abstraction is how we tie together the details of DPDK
+memory management and the Rust type system. NetBricks'
+\textbf{Packet}s are, by default, mutable meaning the Rust compiler
+will not allow them to cross thread boundaries in order to prevent
+data races. However since the pointer to the mbuf is immutable this
+poses a problem when sending the packet. Indeed DPDK stores headers in
+the same buffer as the payload, meaning we can't easily send the same
+payload concurrently to two different destination. The way to solve
+this is make use of DPDK's mbuf chaining, the first mbuf in the chain
+being local to the current thread (therefore being mutable) and the
+second one being the immutable payload shared between threads. This is
+the second notable modification we make to our NetBricks fork, the
+ability to chain mbufs to maintain the immutability of the packets we
+received from the network while also having the possibility to send
+them concurrently to different destinations.
 
 One more thing that needs to be implemented in NetBricks is packets
 living longer than the packet processing pipeline. Since NetBricks is
@@ -262,14 +265,32 @@ segmented packets the headers always have a reference count of one,
 indeed they are not needed once the packet has been sent successfully,
 thus we let DPDK free them once the packet have gone through the
 NIC\@. The payload on the other hand should not be deallocated after
-sending, so we set its reference count to 2, thereby preventing DPDK
-from freeing it. But we still need to free them once they are not
-needed anymore. The problem here is that mbuf reference counts are not
-atomic, this is a problem in our case since the same payload could be
-sent from two different threads which will both need to increment
-it. That means we need to wrap the actual payload and provide an
-atomic reference counting capability to prevent mbufs from beeing
-freed too early.
+sending, so we set its reference count to at least 2, thereby
+preventing DPDK from freeing it. But we still need to free them once
+they are not needed anymore.
+
+The CrossPacket abstraction provides a convenient wrapper around mbufs
+that make the link between the static Rust analysis and the manual
+memory management required by C. This is done through the use two
+other standard Rust traits, \textbf{Drop} and \textbf{Clone}.
+Both of these are closely related to how Rust manages memory. The Drop
+trait indicate that an object needs to perform specific steps when
+being deallocated. In our case it is decreasing the reference count of
+the wrapped mbuf and freeing it if the reference count reaches 0. In
+essence this simplifies greatly the memory management since Rust
+automatically calls the Drop trait of an object when that object
+should be destroyed.
+
+\lstinputlisting[caption={Drop and Clone trait},label={fig:dropclone}]{../code/dropclone.rs}
+
+The Clone trait is the reverse of the Drop trait, it allows to create
+copies of objects that can't be bitwise copied. In our case the Drop
+trait is critical in providing zero copy semantics for
+CrossPacket. Indeed we can implement the Drop trait by copying the
+wrapped mbuf pointer and increasing its reference count, thereby
+creating and easy to use packet duplication mechanism without actually
+copying their payloads.
+
 
 %%% Local Variables:
 %%% mode: latex

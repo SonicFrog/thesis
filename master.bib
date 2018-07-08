@@ -22,6 +22,37 @@ YEAR=2014,
 AUTHOR="Hyeontaek Lim and Dongsu Han and David G. Andersen and Michael Kaminsky",
 }
 
+@BOOK{reflex,
+TITLE = "ReFlex, Remote Flash Local Flash",
+HOWPUBLISHED= {\url{http://csl.stanford.edu/~christos/publications/2017.reflex.asplos.pdf}},
+AUTHOR = "Ana Klimovic and Heiner Litz and Christos Kozyrakis",
+YEAR=2017,
+}
+
+@inproceedings {mos,
+author = {Muhammad Asim Jamshed and YoungGyoun Moon and Donghwi Kim and Dongsu Han and KyoungSoo Park},
+title = {mOS: A Reusable Networking Stack for Flow Monitoring Middleboxes},
+booktitle = {14th {USENIX} Symposium on Networked Systems Design and Implementation ({NSDI} 17)},
+year = {2017},
+isbn = {978-1-931971-37-9},
+address = {Boston, MA},
+pages = {113--129},
+url = {https://www.usenix.org/conference/nsdi17/technical-sessions/presentation/jamshed},
+publisher = {{USENIX} Association},
+}
+
+@inproceedings {arrakis,
+author = {Simon Peter and Jialin Li and Irene Zhang and Dan R. K. Ports and Doug Woos and Arvind Krishnamurthy and Thomas Anderson and Timothy Roscoe},
+title = {Arrakis: The Operating System is the Control Plane},
+booktitle = {11th {USENIX} Symposium on Operating Systems Design and Implementation ({OSDI} 14)},
+year = {2014},
+isbn = { 978-1-931971-16-4},
+address = {Broomfield, CO},
+pages = {1--16},
+url = {https://www.usenix.org/conference/osdi14/technical-sessions/presentation/peter},
+publisher = {{USENIX} Association},
+}
+
 @ELECTRONIC{redox,
 AUTHOR="The Redox Project",
 TITLE="Redox Book",
@@ -45,6 +76,17 @@ AUTHOR="The DPDK authors",
 HOWPUBLISHED="{\url{https://doc.dpdk.org/guides-1.8/prog_guide/poll_mode_drv.html}}",
 }
 
+@MISC{dpdk,
+TITLE="The DataPlane Development Kit",
+HOWPUBLISHED= {\url{https://www.dpdk.org/}},
+}
+
+@BOOK{nicperf,
+TITLE="Evaluating the Suitability of Server Network Cards for Software Routers",
+HOWPUBLISHED={\url{https://people.eecs.berkeley.edu/~sylvia/papers/nic-eval.pdf}},
+AUTHOR="Maziar Manesh and Katerina Argyraki and Mihai Dobrescu and Norbert Egi and Kevin Fall and Gianluca Iannaccone and Eddie Kohler and Sylvia Ratnasamy",
+}
+
 @BOOK{ix,
 TITLE="IX: A Protected Dataplane Operating System for High Throughput and Low Latency",
 AUTHOR="Adam Belay and George Prekas and Ana Klimovic and Samul Grossman and Christos Kozyrakis and Edouard Bugnion",
@@ -61,4 +103,65 @@ YEAR=2012,
   key = {attention},
   title = {Speed Matters},
   howpublished = {\url{https://ai.googleblog.com/2009/06/speed-matters.html}}
+}
+
+@inproceedings {netmap,
+author = {Luigi Rizzo},
+title = {netmap: A Novel Framework for Fast Packet I/O},
+booktitle = {2012 {USENIX} Annual Technical Conference ({USENIX} {ATC} 12)},
+year = {2012},
+isbn = {978-931971-93-5},
+address = {Boston, MA},
+pages = {101--112},
+url = {https://www.usenix.org/conference/atc12/technical-sessions/presentation/rizzo},
+publisher = {{USENIX} Association},
+}
+
+@misc{url:thrift,
+key={thrift},
+title={Apache Thrift},
+howpublished={\url{https://thrift.apache.org/}},
+}
+
+@misc{url:reludp,
+title= {Reliable UDP protocol Internet-Draft},
+year = {1999},
+howpublished = {\url{https://www.ietf.org/proceedings/44/I-D/draft-ietf-sigtran-reliable-udp-00.txt}},
+}
+
+@MISC{url:redis,
+title = { Redis },
+HOWPUBLISHED = {\url{https://redis.io/documentation}},
+}
+
+@ONLINE{url:quic,
+title = { The QUIC Transport Protocol },
+howpublished = {\url{https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/46403.pdf}},
+}
+
+@misc{url:voldemort,
+title = {Voldemort, a distributed database},
+howpublished = {\url{https://www.project-voldemort.com/voldemort/}},
+}
+
+@ONLINE{url:grpc,
+title = { gRPC, A high performance RPC framework },
+HOWPUBLISHED = {\url{https://grpc.io/}},
+}
+
+@book{url:amazon,
+howpublished = {\url{https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf}},
+title = {Dynamo: Amazon's highly available Key-value Store},
+}
+
+@inproceedings {memcache-facebook,
+author = {Rajesh Nishtala and Hans Fugal and Steven Grimm and Marc Kwiatkowski and Herman Lee and Harry C. Li and Ryan McElroy and Mike Paleczny and Daniel Peek and Paul Saab and David Stafford and Tony Tung and Venkateshwaran Venkataramani},
+title = {Scaling Memcache at Facebook},
+booktitle = {Presented as part of the 10th {USENIX} Symposium on Networked Systems Design and Implementation ({NSDI} 13)},
+year = {2013},
+isbn = {978-1-931971-00-3},
+address = {Lombard, IL},
+pages = {385--398},
+url = {https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala},
+publisher = {{USENIX}},
 }

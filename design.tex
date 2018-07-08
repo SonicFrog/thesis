@@ -157,7 +157,13 @@ application. As such it will provide an example of how to use the
 system. It is the last layer of the system and should not rely on any
 details of the lower layers of the networking stack. Its role in the
 system while be to process individual R2P2 request and parse them
-using the application layer protocol.
+using the application layer protocol, and also to respond
+accordingly.
+
+It will also have to handle the critical task of storing the key-value
+pairs in the store in a manner that allows zero copy insertion and
+retrieval. Great care should therefore but put toward the design of
+this part of the system.
 
 \section{R2P2 stack}
 

@@ -5,7 +5,7 @@ strict tail-latency service level objectives (SLOs) to maintain users'
 attention~\cite{url:attention}.
 While modern networking infrastructure allows for network transfers at
 40 and 100Gbps, and round-trip latencies in a handful of
-microseconds~\cite{XXX}, existing operating systems and application
+microseconds~\cite{nicperf}, existing operating systems and application
 software can prevent applications from achieving close to hardware
 performance~\cite{ix}.
 Thus, both academia and industry have focused on reducing the
@@ -42,18 +42,21 @@ In this thesis, we attempt to co-design and implement a key-value
 store with the networking stack that depends on a reliable transport,
 while at the same time completely eliminating copies both on the
 receive and transmit path.
-To do so, we leverage Rust~\cite{rust}, a new systems programming language, that
+To do so, we leverage Rust~\cite{rustbook}, a new systems programming
+language, that
 guarantees memory safety through an explicit memory onwernship model.
 By using Rust we can reason at compile time about the memory ownership
 that can change between the application and the networking stack.
 
-We implemented a key-value store based on the Redis~\cite{redis} API on top of
-Intel's DPDK~\cite{dpdk} and serves requests over R2P2, a reliable transport
-protocol specifically designed for remote procedure calls (RPCs).
-Our key-value store depends on a lock-free store that eliminates data
-copies between the application and the networking stack.
-The key-value pairs are stored inside the networked buffers as they arrive to the server after a \texttt{set} operation,
-and the access to these network buffers is managed by Rust's explicit ownership model, thus preventing any race conditions.
+We implemented a key-value store based on the Redis~\cite{url:redis}
+API on top of Intel's DPDK~\cite{dpdk} and serves requests over R2P2,
+a reliable transport protocol specifically designed for remote
+procedure calls (RPCs). Our key-value store depends on a lock-free
+store that eliminates data copies between the application and the
+networking stack. The key-value pairs are stored inside the networked
+buffers as they arrive to the server after a \texttt{set} operation,
+and the access to these network buffers is managed by Rust's explicit
+ownership model, thus preventing any race conditions.
 
 The evaluation shows that....\marios{FIXME!}
 

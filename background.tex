@@ -1,89 +1,96 @@
 \chapter{Background} \label{chap:background}
 
-We start by describing the necessary background and related work to motivate our work.
-Given that our approach aims at co-designing a key-value store with the networking stack underneath,
-and do so based on specific programming language concepts,
-we start by describing dataplane operating systems, transport protocols for RPCs and then we focus on Rust.
+We start by describing the necessary background and related work to
+motivate our work.
+Given that our approach aims at co-designing a key-value store with
+the networking stack underneath, and do so based on specific
+programming language concepts, we start by describing dataplane
+operating systems, transport protocols for RPCs and then we focus on
+Rust.
 
 
 \section{Network Kernel-bypassing}
 
-Today's high end NICs support speeds that make traditional kernel networking
-too slow to fully exploit their capacity. The overhead of context switches and
-copying is just too much when treating millions of packets par second. Moreover
-the Linux kernel TCP stack is too general for specific applications, having to
-handle so many quirks of TCP makes it slower than could be achieve with a
-specifically designed networking stack. To address these problems, a technique
-called kernel bypassing was introduced allowing user space programs to speak
-directly to the NIC through the PCIe bus thereby eliminating the kernel
-overhead. These systems significantly improve throughput and tail-latency,
-because they reduced the per-packet system overheads.
+Today's high end NICs support speeds that make traditional kernel
+networking too slow to fully exploit their capacity. The overhead of context
+switches and copying is just too much when treating millions of
+packets par second. Moreover the Linux kernel TCP stack is too general
+for specific applications, having to handle so many quirks of TCP
+makes it slower than could be achieve with a specifically designed
+networking stack. To address these problems, a technique called kernel
+bypassing was introduced allowing user space programs to speak
+directly to the NIC through the PCIe bus thereby eliminating the
+kernel overhead. These systems significantly improve throughput and
+tail-latency, because they reduced the per-packet system overheads.
 
-The advances in dataplane systems were boosted by the advent of userspace packet processing frameworks.
-Intel's DPDK~\cite{dpdk} and netmap~\cite{netmap} allow userspace programs to have access to the network rings,
-thus access directly the Ethernet frames,
-and on top implement any necessary functionality.
-While netmap is interrupt based, DPDK implements operates in a polling mode.
-Thus, dataplane systems use in a tight run-to-completion loop.
-Every received packet runs through network processing,
-then the application is called through application callbacks,
-and finally the responses are sent before processing the next packet.
+The advances in dataplane systems were boosted by the advent of
+userspace packet processing frameworks. Intel's DPDK~\cite{dpdk} and netmap~\cite{netmap} allow userspace programs to have access to the network rings,
+thus access directly the Ethernet frames, and on top implement any
+necessary functionality. While netmap is interrupt based, DPDK
+implements operates in a polling mode. Thus, dataplane systems use in
+a tight run-to-completion loop. Every received packet runs through
+network processing, then the application is called through application
+callbacks, and finally the responses are sent before processing the
+next packet.
 
-Representative systems are IX~\cite{ix}, Arrakis~\cite{arrakis}, Reflex~\cite{http://csl.stanford.edu/~christos/publications/2017.reflex.asplos.pdf}, mOS~\cite{https://www.usenix.org/system/files/conference/nsdi17/nsdi17-jamshed.pdf}.
+Representative systems are IX~\cite{ix}, Arrakis~\cite{arrakis},
+Reflex~\cite{reflex}, mOS~\cite{mos}.
 
 
-Applications that are benefited from dataplane operating systems include end-host applications with stringent latency requirements.
-Key-value stores are a big part of most of today's
-web services (Facebook~\cite{https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf},
-LinkedIn~\cite{https://www.project-voldemort.com/voldemort/} and Amazon~\cite{https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf}
-notably makes heavy use of
-key-value stores). Applying kernel bypass techniques to key-value
-store could bring huge performance improvements, by allowing a
-codesign of the networking stack and the user application for our
-specific purpose. MICA~\cite{mica} is an example of this, an holistic
-approach to key-value stores.
+Applications that have benefited from dataplane operating systems
+include end-host applications with stringent latency requirements.
+Key-value stores are a big part of most of today's web services
+(Facebook~\cite{memcache-facebook}, LinkedIn~\cite{url:voldemort} and
+Amazon~\cite{url:amazon} notably makes heavy use of key-value
+stores). Applying kernel bypass techniques to key-value store could
+bring huge performance improvements, by allowing a codesign of the
+networking stack and the user application for our specific
+purpose. MICA~\cite{mica} is an example of this, an holistic approach
+to key-value stores.
 
-However dataplane systems also come with drawbacks.
-They offer no safety guarantees.
-Since everything usually runs in the same userspace process,
-it is easy to corrupt the networking stack from the user application.
-Research efforts to offer safety guarantees to dataplanes depend either on hardware isolation and virtualization, such as IX,
-or on programming language features, such as NetBricks~\cite{netbricks}.
-NetBricks is a Rust framework built on top of DPDK, 
-aiming to provide isolated software defined network
-functions while eliminating the need for virtualization. It builds
-upon DPDK to provide a convenient Rust interface and provide safety
-guarantees close to that of virtualization with a much lower
-performance penalty.
+However dataplane systems also come with drawbacks. They offer no
+safety guarantees. Since everything usually runs in the same userspace
+process, it is easy to corrupt the networking stack from the user
+application. Research efforts to offer safety guarantees to dataplanes
+depend either on hardware isolation and virtualization, such as IX,
+or on programming language features, such as
+NetBricks~\cite{netbricks}. NetBricks is a Rust framework built on top
+of DPDK, aiming to provide isolated software defined network functions
+while eliminating the need for virtualization. It builds upon DPDK to
+provide a convenient Rust interface and provide safety guarantees
+close to that of virtualization with a much lower performance
+penalty.
 
 \section{Transport protocols for RPCs}
 
 The choice of transport protocol is critical to performance when
 designing an efficient RPC protocol.
-Widely used RPC protocols such as Thrift~\cite{https://thrift.apache.org/} and gRPC~\cite{https://grpc.io/} depend on TCP and HTTP2 equivalently as their underlying RPC transport.
+Widely used RPC protocols such as Thrift~\cite{url:thrift} and gRPC~\cite{url:grpc} depend on TCP and HTTP2 equivalently as their underlying RPC transport.
 
 A reliable transport protocol is a necessary basis for higher-level application abstractions,
 and reduces the complexity of the application code.
 TCP is the defacto standard reliable transport protocol that runs on commodity hardware.
 However ensuring reliability usually involves creating copies of the data sent
 through the network to be able to retransmit it if needed while not
-sharing data with the user program. In the mean time, these application data could be altered.
-Thus copies guarantee this data integrity.
-Traditional reliable networking protocols (such as the Linux kernel's TCP stack) make heavy use of
-copies to avoid this problem. However this makes the latency dependent
-on the size of data therefore degrading performance, especially when
-the payloads grow in size. The question is then can we provide a
-reliable RPC protocol while avoiding copies altogether?
+sharing data with the user program. In the mean time, these
+application data could be altered. Thus copies guarantee this data integrity.
+Traditional reliable networking protocols (such as the Linux kernel's
+TCP stack) make heavy use of copies to avoid this problem. However
+this makes the latency dependent on the size of data therefore
+degrading performance, especially when the payloads grow in size. The
+question is then can we provide a reliable RPC protocol while avoiding
+copies altogether?
 
-Although there are alternative reliable transport protocols both in literature and research,
-all of them suffer from the redundant copies.
-Such protocols are Reliable UDP~\cite{https://www.ietf.org/proceedings/44/I-D/draft-ietf-sigtran-reliable-udp-00.txt},
-QUIC~\cite{https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/46403.pdf}, and R2P2.
-R2P2, the Request Response Pair Protocol, is a highly scalable RPC protocol,
-that provides load-balanced delivery of multi-packet requests and responses on top of UDP,
-and it is designed and implemented in DCSL in EPFL.
+Although there are alternative reliable transport protocols both in
+literature and research, all of them suffer from the redundant
+copies. Such protocols are Reliable UDP~\cite{url:reludp},
+QUIC~\cite{url:quic}, and R2P2.  R2P2, the Request Response Pair
+Protocol, is a highly scalable RPC protocol, that provides
+load-balanced delivery of multi-packet requests and responses on top
+of UDP, and is designed and implemented at DCSL in EPFL.
 
-R2P2 exposes a minimal request-response API and we decided to use that to expose our proposed zero-copy key-value store.
+R2P2 exposes a minimal request-response API and we decided to use that
+to expose our proposed zero-copy key-value store.
 
 \section{Rust}
 
@@ -154,13 +161,10 @@ to a struct member) are not used after the value is destroyed.
 However Rust is a at the core a systems programming language so we
 need some way to bypass the safety restrictions it provides. This is
 where the \textbf{unsafe}~\cite{rustonomicon} keyword comes in. This
-keyword provides a way to tell the Rust compiler that a piece of code
-upholds the memory safety guarantees even though the former can't
-verify  statically that it does. Handling of raw pointers and call to
-foreign functions are cases where the use of \textbf{unsafe} is
-required. Indeed other languages do not provide any of Rust's
-guarantees and do not know about lifetimes. This problem also occurs
-when developing kernels~\cite{rust-os}~\cite{redox}.
+keyword allows programmers to bypass many of the safety checks of
+Rust~\cite{rust-os}~\cite{redox}. It is particularly useful when
+dealing with low level details, as is the case when sending packets in
+a kernel bypass fashion.
 
 \subsection{Concurrency safety}
 
