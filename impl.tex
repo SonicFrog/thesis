@@ -71,7 +71,7 @@ transformed back into an Arc, although this requires using
 therefore introducing a risk of double-free or invalid memory
 accesses.
 
-\lstinputlisting[caption={AtomicBox public interface}]{../code/abox_take.rs}
+\lstinputlisting[caption={AtomicBox public interface},label={fig:aboxinterface}]{../code/abox_take.rs}
 
 The AtomicBox abstraction allows us to implement the optimistic
 multi-version concurrency control scheme. Indeed, the AtomicBox allows
@@ -151,7 +151,22 @@ atomic reference counting on the mbufs, fortunately DPDK already
 provides such a thing, we will see how we tie it to the Rust type
 system in section~\ref{sec:netbricks}.
 
+\lstinputlisting[caption={KeyEntry},
+label={fig:keyentry}]{../code/kentry.rs}
 
+The role of the key-value store is therefore to transform the keys and
+values contained inside packet payloads in a way that allows them to
+be inserted and retrieved from the store while avoiding copies. To do
+this the key-value store wraps the payload in a KeyEntry or
+ValueEntry) structure that allows the payload to be used as if it was
+a plain Rust value. We use again the Deref trait as well as an offset
+to offer easy access to the key (or value) contained inside the
+payload. Both the KeyEntry and the ValueEntry share the same reference
+to the payload, thereby preventing any modification of said payload.
+
+This design also makes the KeyEntry usable as an array of unsigned 8
+bits integers, making hashing and comparisons easy (which is always
+helpful in a hashmap).
 
 \section{R2P2 server}
 
