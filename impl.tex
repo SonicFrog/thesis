@@ -41,19 +41,26 @@ blocks.
 
 This leads us to the \textbf{AtomicBox} abstraction, a safe wrapper
 around \textbf{AtomicPtr}, that we will use to build our OMVCC
-hashmap. The AtomicBox makes use of X86 CAS instructions to improve on
-Arc. Arc provides an atomic reference count and AtomicBox provides an
-atomic reference count as well the possibility to atomically swap that
-value. Since every value is atomically reference counted it will stay
-allocated as long as any reference to it still exists while allowing
-new requests to fetch the newer value to do their work. Updates are
-made using the value atomically fetched at that point in time,
-creating a copy, modifying it as appropriate and then swapping it back
-with the old one. If the swap succeeds the old value's reference count
-is decreased (and dropped if we had the last reference), effectively
-providing an optimistic multi-version concurrency control. If the swap
-fails, i.e.\ someone already swapped it with another value, we repeat
-the same process until the swap is successful.
+hashmap. Creating safe wrapper around unsafe code is a very common
+practice in Rust, it allows the potential memory problems to be
+confined to a particular datastructure while users of the wrapper
+don't have to worry about the unsafety of the underlying code.
+
+The AtomicBox makes use of X86 CAS instructions to improve on
+Arc. Arc (\textbf{A}tomically \textbf{R}eference \textbf{C}ounted
+smart pointers) provides an atomic reference count and AtomicBox
+provides an atomic reference count as well the possibility to
+atomically swap that value. Since every value is atomically reference
+counted it will stay allocated as long as any reference to it still
+exists while allowing new requests to fetch the newer value to do
+their work. Updates are made using the value atomically fetched at
+that point in time, creating a copy, modifying it as appropriate and
+then swapping it back with the old one. If the swap succeeds the old
+value's reference count is decreased (and dropped if we had the last
+reference), effectively providing an optimistic multi-version
+concurrency control. If the swap fails, i.e.\ someone already swapped
+it with another value, we repeat the same process until the swap is
+successful.
 
 To build the AtomicBox abstraction we make use of the capability of
 Arc to be transformed into raw pointers, thus allowing a user to
@@ -68,15 +75,16 @@ accesses.
 
 The AtomicBox abstraction allows us to implement the optimistic
 multi-version concurrency control scheme. Indeed, the AtomicBox allows
-users to extract an Arc to the value referenced by the AtomicPtr it
-contains. We can thus extract values from the AtomicBox and keep them
+users to extract the value it contains and use independently from the
+AtomicBox. We can thus extract values from the AtomicBox and keep them
 even when they are removed from the AtomicPtr as shown in
-figure~\ref{fig:aboxinterface}.
+figure~\ref{fig:aboxinterface}, allowing for an a multi-version
+concurrency control scheme.
 
 The public interface provided by AtomicBox aims to be simple, fast and
 safe, hiding the unsafe details of the actual operation. We therefore
 provide an idiomatic way to update the value as well as a clean way to
-fetch the value. Updates are handled through closures, the user passes
+fetch it. Updates are handled through closures, the user passes
 a closure to the AtomicBox which will apply this closure to the
 current value and then atomically replace the old value with the new
 one. In order to allow the value contained in the AtomicBox to outlive
@@ -137,10 +145,13 @@ are mostly to play nice with the Rust memory management model and
 manage the lifetime of DPDK mbufs. Indeed since we use segmented
 packets, we need the headers to be freed once the request has been
 satisfied but the payload itself must be kept as long as either the
-hashmap or the networking hold it. As the payload can be sent
-concurrently from different threads we need some sort of atomic
-reference counting on the mbufs, fortunately DPDK already provides
-such a thing.
+hashmap or the networking stack hold a reference to it. As the payload
+can be sent concurrently from different threads we need some sort of
+atomic reference counting on the mbufs, fortunately DPDK already
+provides such a thing, we will see how we tie it to the Rust type
+system in section~\ref{sec:netbricks}.
+
+
 
 \section{R2P2 server}
 
@@ -193,8 +204,26 @@ allow sending the same packet concurrently to different destinations.
 To avoid flooding the same TX ring, send() uses a simple round-robin
 approach to select the output queue.
 
+As mentioned in section~\ref{sec:udp-design}, the user provided callback
+should be re-entrant to ensure integrity. We once again leverage Rust
+features to ensure that users won't be able to provide a non
+re-entrant packet handling callback. Indeed, Rust has three types of
+closure: \texttt{Fn}, \texttt{FnMut} and \texttt{FnOnce}.
 
-\section{NetBricks}
+\texttt{Fn} is the type of closure that do not modify the variables
+they capture. Therefore they can be safely shared between threads
+since they won't modify any variables outside of their
+scope. \texttt{FnMut} on the other hand are closures that modify their
+environment therefore not being thread-safe, these closures are
+prevented by the Rust compiler from crossing thread boundaries. And
+lastly \texttt{FnOnce} are even more restrictive. They are the type of
+closures that consume their environment, i.e.\ they transfer ownership
+of their captured values to other functions. That means an
+\texttt{FnOnce} closure can only be run once (as the name implies)
+since the Rust compiler will prevent them from using values they do
+not own anymore.
+
+\section{NetBricks} \label{sec:netbricks}
 
 \begin{figure}[htb!]
 \begin{lstlisting}
