@@ -4,8 +4,9 @@ keys and values sizes we need to eliminate copies from the key-value
 store's datapath while still ensuring reliable delivery of responses
 to requests. We leverage several feature of the Rust programming
 language to achieve zero-copy reliable delivery of key-value store
-responses through the R2P2 protocol.
-\todo{performance numbers}
+responses through the R2P2 protocol while providing a much higher
+level of safety than these type of systems usually do.
+
 
 % The state of the art today for high-speed networking involves kernel
 % bypassing techniques making use of software such as DPDK to reduce the
@@ -30,14 +31,6 @@ responses through the R2P2 protocol.
 % share a virtual address space languages like C do not provide
 % sufficient safety guarantees when data is shared between multiple
 % threads.
-
-\marios{You need a flat abstract without subsection where you clearly
-  state the problem. "We need to eliminate copies in a KV-store's
-  datapath. Thus we use language features to reason about data
-  onwership." You mention that we use Rust for that without any
-  details. You mention that the solution is for reliable transport
-  protocols and we use R2P2 without getting into details. And then you
-  state some basic performance numbers.}
 
 %%% Local Variables:
 %%% mode: latex

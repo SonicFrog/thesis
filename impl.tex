@@ -277,9 +277,9 @@ Both of these are closely related to how Rust manages memory. The Drop
 trait indicate that an object needs to perform specific steps when
 being deallocated. In our case it is decreasing the reference count of
 the wrapped mbuf and freeing it if the reference count reaches 0. In
-essence this simplifies greatly the memory management since Rust
+essence this greatly simplifies the memory management since Rust
 automatically calls the Drop trait of an object when that object
-should be destroyed.
+is about to be destroyed.
 
 \lstinputlisting[caption={Drop and Clone trait},label={fig:dropclone}]{../code/dropclone.rs}
 

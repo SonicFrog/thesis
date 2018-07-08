@@ -49,7 +49,7 @@ after having been removed from the store.
 With all these constraints in mind, we go with the design shown
 in~\hyperref[fig:hashmap]{figure~\ref{fig:hashmap}}. The top level
 table is a contiguous array of atomic pointers to overflow
-buckets. And in turn each overflow bucket entry? is a pointer to a
+buckets. And in turn each overflow bucket entry is a pointer to a
 key-value pair structure allowing fast, easy and zero-copy retrieval
 of values.
 
@@ -95,19 +95,6 @@ access the new version of the bucket created by the GET thread.
 A \textbf{key removal} follows the same process as an insertion except
 that instead of adding a key to the bucket we remove it before
 swapping it back with the old version.
-
-We should also, according to the constraints support lock-free and
-fast insertion or replacement of values while not interfering with
-concurrent retrievals. This is where making the pointers to the
-buckets atomic will come in handy. Insertions can then be done as
-follows, atomically retrieve the bucket the value we are inserting
-belongs in, increase its reference count to ensure it won't be freed
-concurrently. Then create a thread local copy of said bucket. At this
-point any concurrent retrieval request can still fetch the shared
-value of the bucket, so the insertion does not interfere with the
-retrieval. The inserting thread can then make the necessary
-modifications to its local copy of the bucket, as shown
-in~\ref{fig:omvcc-insert}.
 
 \begin{figure}[htb!]
   \includegraphics[width=\textwidth]{../diagram/amap2.pdf}
@@ -205,10 +192,10 @@ framework.
 It is worth mentioning the Linux kernel socket flag for zero copy.
 Though it does not provide guaranteed zero copy sending/receiving a
 port of nginx using it saw a 9\% increase in performance with minimal
-code changes. The choice was made not to use it, since it would
-eliminate one of the most interesting aspect of the project, the
-ability to have a safe userspace networking stack in the same address
-space as the user program.
+code changes~\cite{linuxzc}. The choice was made not to use it, since
+it would eliminate one of the most interesting aspect of the project,
+the ability to have a safe userspace networking stack in the same
+address space as the user program.
 
 As for the local store, the UDP stack should uphold the zero-copy
 property of the system. That means it should interface with the

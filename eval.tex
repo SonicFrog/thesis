@@ -77,7 +77,8 @@ than once because of the contention on buckets.
 We also notice a slight increase in GET times. This is most likely due
 to the atomic instructions used to fetch buckets that can cause
 stalling due to the necessity of synchronizing memory accesses across
-cores.
+cores. However even when introducing high collision rate the hashmap
+still has reasonable performance.
 
 \section{Networked store}
 
